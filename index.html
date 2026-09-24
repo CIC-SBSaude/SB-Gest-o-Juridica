@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SB Gestão Jurídica</title>
+    <meta name="description" content="Sistema corporativo SB Saúde para gestão do andamento jurídico de processos, prazos e controle processual." />
+    <meta property="og:title" content="SB Gestão Jurídica" />
+    <meta property="og:description" content="Sistema corporativo SB Saúde para gestão do andamento jurídico de processos, prazos e controle processual." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Intercepta e silencia exclusivamente o erro benigno de WebSocket/HMR do Vite no ambiente de preview do AI Studio
+      window.addEventListener('unhandledrejection', function (event) {
+        var reason = event.reason;
+        var msg = (reason && (reason.message || reason.toString())) || '';
+        if (typeof msg === 'string' && msg.includes('WebSocket closed without opened')) {
+          event.preventDefault();
+        }
+      });
+    </script>
+  </head>
+  <body class="bg-[#F8FAFC] text-[#0F172A] antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

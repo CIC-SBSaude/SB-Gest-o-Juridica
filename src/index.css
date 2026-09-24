@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.stat-card {
+  background-color: #ffffff;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.action-btn {
+  background-color: #E11D48;
+  color: #ffffff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.action-btn:hover {
+  background-color: #BE123C;
+}
+
+.action-btn-secondary {
+  background-color: transparent;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.15s ease-in-out;
+}
+
+.action-btn-secondary:hover {
+  background-color: #F8FAFC;
+  color: #0F172A;
+  border-color: #CBD5E1;
+}
+
+.badge-red {
+  background-color: #FEE2E2;
+  color: #991B1B;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Identidade visual corporativa SB Saúde */
+:root {
+  --sb-red: #E30613;
+  --sb-red-dark: #C90010;
+  --sb-navy: #17233A;
+  --sb-text: #52637A;
+  --sb-border: #E2E8F0;
+  --sb-surface: #FFFFFF;
+  --sb-background: #F7F9FC;
+}
+
+::selection {
+  background: #FECACA;
+  color: #7F1D1D;
+}
+
+
+/* 5F-C: aproveitamento de espaço e responsividade operacional */
+#main-content-area > * { min-width: 0; }
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+.scrollbar-thin::-webkit-scrollbar { height: 7px; width: 7px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 9999px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
+@media (max-width: 1023px) {
+  .stat-card { padding: 1rem; }
+}
+
+/* Regras de impressão e exportação executiva (PDF / A4) */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
+  body {
+    background-color: #FFFFFF !important;
+    color: #0F172A !important;
+    font-size: 11pt !important;
+  }
+
+  /* Ocultar navegação, cabeçalhos do app e botões interativos */
+  header, aside, nav, #sidebar, .no-print, button, select {
+    display: none !important;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  /* Exibir elementos exclusivos de impressão */
+  .print-only {
+    display: block !important;
+  }
+
+
+  .executive-kpi-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .executive-secondary-grid,
+  .executive-operational-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .print-demand-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Garantir que cartões e tabelas não sejam quebrados no meio da página */
+  .printable-card, tr, table {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .printable-card {
+    border: 1px solid #CBD5E1 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Prevenir barras de rolagem em impressão */
+  * {
+    overflow: visible !important;
+    scrollbar-width: none !important;
+  }
+}
+

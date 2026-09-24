@@ -1,0 +1,6 @@
+{
+  "name": "SB Gestão Jurídica",
+  "description": "Sistema corporativo SB Saúde para gestão do andamento jurídico de processos, prazos e controle processual.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
