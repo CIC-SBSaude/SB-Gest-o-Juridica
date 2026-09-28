@@ -1,5 +1,200 @@
 export type { UserRole } from './auth';
 
+// ===== E1 — RF01 Segmento =====
+export type ProcessSegment = 'ASSISTENCIAL' | 'PRESTADOR' | 'OUTRO' | 'NAO_CLASSIFICADO';
+export type SegmentOrigin = 'MANUAL' | 'IA' | 'IA_CONFIRMADA';
+
+// ===== E1 — RF03 Origem =====
+export type OriginConfidence = 'COMPROVADA' | 'INFERIDA' | 'MANUAL' | 'PENDENTE';
+export type OriginDataType =
+  | 'DATA_DECLARADA_EMAIL'
+  | 'DATA_RECEBIMENTO_CAIXA'
+  | 'DATA_IMPORTACAO'
+  | 'DATA_CADASTRO_JURIDICO'
+  | 'DATA_MANUAL';
+
+// ===== E1 — RF02 Rés =====
+export type DefendantPapel = 'REU' | 'REU_SOLIDARIO' | 'REU_SUBSIDIARIO' | 'NAO_IDENTIFICADA' | 'OUTRA';
+
+export interface ProcessDefendant {
+  id: string;
+  process_id: string;
+  company_id: string | null;
+  nome_livre: string | null;
+  documento_livre: string | null;
+  papel: DefendantPapel;
+  evidencia_texto: string | null;
+  evidencia_fonte: 'EMAIL' | 'DOCUMENTO' | 'MANUAL' | null;
+  confirmado: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_by: string | null;
+  updated_at: string;
+  correcao_anterior: Record<string, unknown> | null;
+  correcao_motivo: string | null;
+  correcao_em: string | null;
+  correcao_por: string | null;
+  // Joined
+  company?: {
+    id: string;
+    nome: string;
+    cnpj: string | null;
+  } | null;
+}
+
+// ===== E1 — RF03 Competência de origem =====
+export interface ProcessOrigin {
+  id: string;
+  process_id: string;
+  data_origem: string | null; // DATE as ISO string
+  competencia_mes: number | null;
+  competencia_ano: number | null;
+  tipo_data: OriginDataType;
+  confiabilidade: OriginConfidence;
+  email_referencia_id: string | null;
+  manual: boolean;
+  justificativa_manual: string | null;
+  definido_por: 'SISTEMA' | 'USUARIO' | 'IA';
+  definido_por_usuario_id: string | null;
+  is_current: boolean;
+  substituido_por: string | null;
+  created_at: string;
+}
+
+// ===== E1 — RF08 Catálogo assistencial =====
+export type AssistentialClass = 'EXAME' | 'CIRURGIA' | 'CONSULTA' | 'INTERNACAO' | 'TERAPIA' | 'OUTRO';
+
+export interface AssistentialCatalogItem {
+  id: string;
+  classe: AssistentialClass;
+  detalhe: string;
+  detalhe_normalizado: string;
+  sinonimos: string[];
+  ativo: boolean;
+  codigo_estavel: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ItemReviewState = 'PENDENTE' | 'ACEITA' | 'CORRIGIDA' | 'REJEITADA';
+export type ItemSource = 'MANUAL' | 'IA' | 'IA_CONFIRMADA';
+
+export interface ProcessAssistentialItem {
+  id: string;
+  process_id: string;
+  catalog_id: string | null;
+  descricao_livre: string | null;
+  predominante: boolean;
+  fonte: ItemSource;
+  evidencia_id: string | null;
+  revisao: ItemReviewState;
+  revisado_por: string | null;
+  revisado_em: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  catalog?: AssistentialCatalogItem | null;
+}
+
+// ===== E1 — RF15 Pendências de qualidade =====
+export type QualityPendencyMotivo =
+  | 'NAO_INFORMADO'
+  | 'NAO_APLICAVEL'
+  | 'PENDENTE_CONFIRMACAO'
+  | 'ERRO_CONSULTA'
+  | 'FORMATO_INVALIDO'
+  | 'DADO_SUSPEITO';
+
+export type QualityPendencyState =
+  | 'ABERTA'
+  | 'EM_TRATAMENTO'
+  | 'RESOLVIDA'
+  | 'IGNORADA'
+  | 'CANCELADA';
+
+export interface ProcessQualityPendency {
+  id: string;
+  process_id: string;
+  campo: string;
+  motivo: QualityPendencyMotivo;
+  descricao: string;
+  responsavel_tipo: 'OPERADORA' | 'ESCRITORIO' | 'TI' | 'EXTERNO' | 'NAO_DEFINIDO' | null;
+  responsavel_usuario_id: string | null;
+  prioridade: 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
+  estado: QualityPendencyState;
+  resolucao_descricao: string | null;
+  resolvido_por: string | null;
+  resolvido_em: string | null;
+  origem: 'SISTEMA' | 'USUARIO' | 'IA' | 'VALIDACAO';
+  created_at: string;
+  updated_at: string;
+}
+
+// ===== E1 — RF16 Fila de enriquecimento =====
+export type EnrichmentJobType =
+  | 'CLASSIFICACAO_SEGMENTO'
+  | 'EXTRACAO_REU'
+  | 'EXTRACAO_ORIGEM'
+  | 'EXTRACAO_BENEFICIARIO'
+  | 'EXTRACAO_VALORES'
+  | 'EXTRACAO_PRESTADOR'
+  | 'EXTRACAO_ALEGACOES'
+  | 'VINCULO_DOCUMENTAL';
+
+export type EnrichmentJobState =
+  | 'PENDENTE'
+  | 'PROCESSANDO'
+  | 'CONCLUIDO'
+  | 'ERRO'
+  | 'QUARENTENA'
+  | 'CANCELADO';
+
+export interface EnrichmentJob {
+  id: string;
+  process_id: string | null;
+  email_id: string | null;
+  tipo: EnrichmentJobType;
+  estado: EnrichmentJobState;
+  prioridade: number;
+  chave_idempotente: string;
+  versao_extrator: string | null;
+  tentativas: number;
+  max_tentativas: number;
+  proximo_em: string;
+  locked_at: string | null;
+  locked_by: string | null;
+  checkpoint: Record<string, unknown>;
+  ultimo_erro: string | null;
+  ultimo_erro_tipo: 'TRANSITORIO' | 'CONTRATO' | 'AUTORIZACAO' | 'DESCONHECIDO' | null;
+  concluido_em: string | null;
+  custo_estimado: number | null;
+  custo_real: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ===== E1 — RF18 Duplicatas CNJ =====
+export type CnjDuplicateState =
+  | 'PENDENTE_ANALISE'
+  | 'EM_ANALISE'
+  | 'ESCLARECIDO'
+  | 'CONSOLIDADO';
+
+export interface ProcessCnjDuplicate {
+  id: string;
+  cnj_normalizado: string;
+  process_ids: string[];
+  quantidade: number;
+  estado: CnjDuplicateState;
+  motivo_multiplicidade: string | null;
+  processo_canonico_id: string | null;
+  analisado_por: string | null;
+  analisado_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ProcessStatus =
   | 'NOVA'
   | 'TRIAGEM'
@@ -65,6 +260,14 @@ export interface Process {
   updated_at: string;
   updated_by: string | null;
 
+  // E1 — RF01 Segmento
+  segmento?: ProcessSegment | null;
+  segmento_origem?: SegmentOrigin | null;
+  segmento_atualizado_em?: string | null;
+
+  // E1 — RF18 CNJ normalizado
+  cnj_normalizado?: string | null;
+
   // Gestão gerencial (Fase 5B)
   status_operacional?: OperationalStatus | string;
   responsabilidade_atual?: ResponsibilityType | string;
@@ -96,6 +299,10 @@ export interface Process {
   } | null;
   proxima_obrigacao?: Obligation | null;
   autores?: ProcessParty[];
+  // E1 — rés e itens assistenciais (joined opcionalmente)
+  defendants?: ProcessDefendant[];
+  assistential_items?: ProcessAssistentialItem[];
+  origin?: ProcessOrigin | null;
 }
 
 export type ProcessPartyType =

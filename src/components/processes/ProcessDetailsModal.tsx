@@ -32,6 +32,10 @@ import { ProcessLawFirmTab } from './ProcessLawFirmTab';
 import { formatCurrencyBRL } from '../../utils/currency';
 import { formatProcessNumber } from '../../utils/cnj';
 import { categoryLabel, subcategoryLabel, legalNatureLabel } from '../../services/demandClassificationService';
+// E1 — novos componentes
+import { ProcessSegmentBadge } from './ProcessSegmentBadge';
+import { ProcessDefendantsSection } from './ProcessDefendantsSection';
+import { ProcessOriginCard } from './ProcessOriginCard';
 
 interface ProcessDetailsModalProps {
   isOpen: boolean;
@@ -109,6 +113,8 @@ const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
                   </h3>
                   <ProcessStatusBadge status={currentProcess.status_atual} size="sm" />
                   <ProcessPriorityBadge priority={currentProcess.prioridade} />
+                  {/* E1 — RF01: badge de segmento */}
+                  <ProcessSegmentBadge segmento={currentProcess.segmento} size="sm" />
                   {currentProcess.arquivado && (
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-200 text-slate-700">
                       Arquivado
@@ -414,6 +420,23 @@ const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* E1 — RF02: Seção de Rés (separada da empresa do contrato) */}
+              <div className="bg-white border border-slate-200/80 rounded-xl p-4">
+                <ProcessDefendantsSection
+                  processId={currentProcess.id}
+                  readOnly={!canEdit}
+                />
+              </div>
+
+              {/* E1 — RF03: Competência de Origem */}
+              <div className="bg-white border border-slate-200/80 rounded-xl p-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-red-600" />
+                  <span>Competência de Origem</span>
+                </h4>
+                <ProcessOriginCard processId={currentProcess.id} />
               </div>
 
               {/* Grid 3: Datas do Fluxo Processual */}
