@@ -119,7 +119,7 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
         setUf(currentProcess.uf || 'SP');
         setValorCausa(
           currentProcess.valor_causa !== null && currentProcess.valor_causa !== undefined
-            ? maskCurrencyBRL(currentProcess.valor_causa)
+            ? maskCurrencyBRL(String(Math.round(currentProcess.valor_causa * 100)))
             : ''
         );
         setSituacaoBeneficiario(currentProcess.situacao_beneficiario || 'Ativo');
