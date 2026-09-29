@@ -388,7 +388,8 @@ CREATE INDEX IF NOT EXISTS idx_cnj_duplicates_estado
 
 -- ============================================================================
 -- RLS — Row Level Security para as novas tabelas
--- Segue padrão das tabelas existentes: autenticado lê, ADMIN/ADVOGADO/ANALISTA escrevem
+-- Roles válidos: ADMIN, GESTOR, ANALISTA, CONSULTA
+-- Escrita: ADMIN + GESTOR + ANALISTA | Leitura: qualquer autenticado
 -- ============================================================================
 
 ALTER TABLE public.process_defendants ENABLE ROW LEVEL SECURITY;
@@ -406,14 +407,14 @@ CREATE POLICY "Analista+ cria rés" ON public.process_defendants
     FOR INSERT WITH CHECK (
         EXISTS (
             SELECT 1 FROM public.user_profiles
-            WHERE id = auth.uid() AND role IN ('ADMIN', 'ADVOGADO', 'ANALISTA') AND active = TRUE
+            WHERE id = auth.uid() AND role IN ('ADMIN', 'GESTOR', 'ANALISTA') AND active = TRUE
         )
     );
 CREATE POLICY "Analista+ edita rés" ON public.process_defendants
     FOR UPDATE USING (
         EXISTS (
             SELECT 1 FROM public.user_profiles
-            WHERE id = auth.uid() AND role IN ('ADMIN', 'ADVOGADO', 'ANALISTA') AND active = TRUE
+            WHERE id = auth.uid() AND role IN ('ADMIN', 'GESTOR', 'ANALISTA') AND active = TRUE
         )
     );
 
@@ -424,7 +425,7 @@ CREATE POLICY "Analista+ escreve origens" ON public.process_origin
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM public.user_profiles
-            WHERE id = auth.uid() AND role IN ('ADMIN', 'ADVOGADO', 'ANALISTA') AND active = TRUE
+            WHERE id = auth.uid() AND role IN ('ADMIN', 'GESTOR', 'ANALISTA') AND active = TRUE
         )
     );
 
@@ -446,7 +447,7 @@ CREATE POLICY "Analista+ escreve itens" ON public.process_assistential_items
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM public.user_profiles
-            WHERE id = auth.uid() AND role IN ('ADMIN', 'ADVOGADO', 'ANALISTA') AND active = TRUE
+            WHERE id = auth.uid() AND role IN ('ADMIN', 'GESTOR', 'ANALISTA') AND active = TRUE
         )
     );
 
@@ -457,7 +458,7 @@ CREATE POLICY "Sistema e analista escrevem pendências" ON public.process_qualit
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM public.user_profiles
-            WHERE id = auth.uid() AND role IN ('ADMIN', 'ADVOGADO', 'ANALISTA') AND active = TRUE
+            WHERE id = auth.uid() AND role IN ('ADMIN', 'GESTOR', 'ANALISTA') AND active = TRUE
         )
     );
 
@@ -472,7 +473,7 @@ CREATE POLICY "Analista+ gerencia duplicatas" ON public.process_cnj_duplicates
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM public.user_profiles
-            WHERE id = auth.uid() AND role IN ('ADMIN', 'ADVOGADO', 'ANALISTA') AND active = TRUE
+            WHERE id = auth.uid() AND role IN ('ADMIN', 'GESTOR', 'ANALISTA') AND active = TRUE
         )
     );
 

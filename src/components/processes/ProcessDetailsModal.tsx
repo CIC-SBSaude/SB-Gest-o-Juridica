@@ -36,6 +36,11 @@ import { categoryLabel, subcategoryLabel, legalNatureLabel } from '../../service
 import { ProcessSegmentBadge } from './ProcessSegmentBadge';
 import { ProcessDefendantsSection } from './ProcessDefendantsSection';
 import { ProcessOriginCard } from './ProcessOriginCard';
+// E2 — novos componentes
+import { ProcessFinancialSection } from './ProcessFinancialSection';
+import { ProcessProvidersSection } from './ProcessProvidersSection';
+// E3 — novos componentes
+import { ProcessBeneficiariesSection } from './ProcessBeneficiariesSection';
 
 interface ProcessDetailsModalProps {
   isOpen: boolean;
@@ -62,7 +67,17 @@ const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
   onDelete,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'visao-geral' | 'gestao' | 'timeline' | 'obrigacoes' | 'pendencias' | 'escritorio' | 'documentos' | 'auditoria'
+    | 'visao-geral'
+    | 'beneficiarios'
+    | 'financeiro'
+    | 'prestadores'
+    | 'gestao'
+    | 'timeline'
+    | 'obrigacoes'
+    | 'pendencias'
+    | 'escritorio'
+    | 'documentos'
+    | 'auditoria'
   >('visao-geral');
   const managementRef = useRef<ProcessManagementTabHandle>(null);
   const [managementSaving, setManagementSaving] = useState(false);
@@ -75,6 +90,9 @@ const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
 
   const tabs = [
     { id: 'visao-geral', label: 'Visão Geral' },
+    { id: 'beneficiarios', label: 'Beneficiários & Planos' },
+    { id: 'financeiro', label: 'Valores & Sentenças' },
+    { id: 'prestadores', label: 'Prestadores & Serviços' },
     { id: 'gestao', label: 'Gestão Operacional' },
     { id: 'timeline', label: 'Andamentos & Timeline' },
     { id: 'obrigacoes', label: 'Obrigações e Prazos' },
@@ -481,6 +499,21 @@ const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* E3 — ABA BENEFICIÁRIOS E PLANOS (RF05, RF06, RF07) */}
+          {activeTab === 'beneficiarios' && (
+            <ProcessBeneficiariesSection processId={currentProcess.id} readOnly={!canEdit} />
+          )}
+
+          {/* E2 — ABA VALORES E SENTENÇAS (RF09, RF13) */}
+          {activeTab === 'financeiro' && (
+            <ProcessFinancialSection processId={currentProcess.id} readOnly={!canEdit} />
+          )}
+
+          {/* E2 — ABA PRESTADORES E SERVIÇOS (RF11, RF12) */}
+          {activeTab === 'prestadores' && (
+            <ProcessProvidersSection processId={currentProcess.id} readOnly={!canEdit} />
           )}
 
           {/* GESTÃO OPERACIONAL */}

@@ -664,3 +664,280 @@ export interface ProcessManagementSnapshot {
   escritorio_parado?: boolean;
   alert_codes?: string[] | null;
 }
+
+// ============================================================================
+// E2 — RF09, RF11, RF12, RF13: Valores, Decisões e Prestadores
+// ============================================================================
+
+export type DecisionTipo = 'SENTENCA' | 'ACORDAO' | 'DECISAO_INTERLOCUTORIA' | 'TUTELA' | 'OUTRO';
+
+export type DecisionEstadoValor =
+  | 'QUANTIFICADA'
+  | 'ILIQUIDA'
+  | 'NAO_MONETARIA'
+  | 'PENDENTE_REVISAO'
+  | 'DESCONHECIDA';
+
+export interface ProcessDecision {
+  id: string;
+  process_id: string;
+  tipo: DecisionTipo;
+  data_decisao: string | null;
+  estado_valor: DecisionEstadoValor;
+  montante: number | null;
+  moeda: string;
+  is_referencia: boolean;
+  documento_ref: string | null;
+  trecho_citado: string | null;
+  motivo_escolha: string | null;
+  substituida_por_id: string | null;
+  versao: number;
+  is_current: boolean;
+  criado_em: string;
+  atualizado_em: string;
+  criado_por: string | null;
+  revisado_por: string | null;
+  revisado_em: string | null;
+}
+
+export type ProviderCategoria =
+  | 'HOSPITAL'
+  | 'CLINICA'
+  | 'OPME'
+  | 'MEDICO_PJ'
+  | 'MANUTENCAO'
+  | 'OUTRO';
+
+export type ProviderPapelProcessual =
+  | 'AUTOR'
+  | 'CITADO_LOCAL'
+  | 'LITISCONSORTE'
+  | 'TERCEIRO'
+  | 'OUTRO';
+
+export interface ProcessServiceProvider {
+  id: string;
+  process_id: string;
+  party_id: string | null;
+  nome_razao_social: string;
+  tipo_pessoa: 'PJ' | 'PF';
+  documento: string | null;
+  categoria: ProviderCategoria;
+  natureza_vinculo: string;
+  vinculo_confirmado: boolean;
+  papel_processual: ProviderPapelProcessual;
+  origem_evidencia: string | null;
+  observacoes: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  criado_por: string | null;
+  revisado_por: string | null;
+  revisado_em: string | null;
+}
+
+export type PrecisaoData = 'EXATA' | 'MENSAL' | 'INTERVALO_ABERTO' | 'DESCONHECIDA';
+
+export interface ProviderService {
+  id: string;
+  process_id: string;
+  provider_id: string;
+  tipo_servico: string;
+  descricao: string | null;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  precisao_data: PrecisaoData;
+  competencia_entrada: string | null;
+  vencimento_fatura: string | null;
+  fonte: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  criado_por: string | null;
+}
+
+export type FinancialFase = 'PEDIDO' | 'SENTENCA' | 'ACORDO' | 'OUTRO';
+
+export type FinancialNatureza =
+  | 'DIVIDA_SERVICO'
+  | 'DANO_MATERIAL'
+  | 'DANO_MORAL'
+  | 'OUTRO_IDENTIFICADO'
+  | 'MULTA_ASTREINTES'
+  | 'HONORARIOS';
+
+export type FinancialStatusRevisao = 'PENDENTE' | 'CONFIRMADO' | 'DIVERGENTE' | 'REJEITADO';
+
+export interface ProcessFinancialComponent {
+  id: string;
+  process_id: string;
+  provider_id: string | null;
+  service_id: string | null;
+  decision_id: string | null;
+  fase: FinancialFase;
+  natureza: FinancialNatureza;
+  valor: number;
+  moeda: string;
+  cumulativo: boolean;
+  sobreposto: boolean;
+  status_revisao: FinancialStatusRevisao;
+  fonte: string | null;
+  descricao: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  criado_por: string | null;
+  revisado_por: string | null;
+  revisado_em: string | null;
+}
+
+export interface ProcessFinancialHighlight {
+  process_id: string;
+  numero_processo: string | null;
+  valor_causa: number | null;
+  exposicao_estimada: number | null;
+  total_pedidos_discriminados: number | null;
+  valor_pedido_conhecido: number | null;
+  sentenca_referencia_id: string | null;
+  sentenca_tipo: DecisionTipo | null;
+  sentenca_data: string | null;
+  sentenca_estado_valor: DecisionEstadoValor | null;
+  sentenca_montante: number | null;
+  destaque_estado:
+    | 'SENTENCA_QUANTIFICADA'
+    | 'PEDIDO_SEM_SENTENCA'
+    | 'SENTENCA_ILIQUIDA'
+    | 'SENTENCA_NAO_MONETARIA'
+    | 'REVISAO_PENDENTE'
+    | 'SEM_REGISTRO';
+  destaque_rotulo: string;
+  destaque_valor: number | null;
+}
+
+export interface ProviderDebtSummary {
+  provider_id: string;
+  process_id: string;
+  nome_razao_social: string;
+  categoria: ProviderCategoria;
+  natureza_vinculo: string;
+  vinculo_confirmado: boolean;
+  qtd_servicos: number;
+  total_divida_servico: number;
+  total_dano_material: number;
+  total_dano_moral: number;
+  total_cumulativo: number;
+  tem_sobreposicao: boolean;
+  tem_revisao_pendente: boolean;
+}
+
+// ============================================================================
+// E3 — RF05, RF06, RF07: Beneficiários, Planos e Localização
+// ============================================================================
+
+export interface BeneficiaryPerson {
+  id: string;
+  nome_completo: string;
+  cpf: string | null;
+  data_nascimento: string | null;
+  nome_mae: string | null;
+  cns: string | null;
+  municipio: string | null;
+  uf: string | null;
+  codigo_municipio_ibge: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  criado_por: string | null;
+}
+
+export type EnrollmentStatus = 'ATIVO' | 'CANCELADO' | 'SUSPENSO' | 'DESCONHECIDO';
+
+export type TipoContratacao =
+  | 'COLETIVO_EMPRESARIAL'
+  | 'COLETIVO_ADESAO'
+  | 'INDIVIDUAL_FAMILIAR'
+  | 'OUTRO'
+  | 'NAO_INFORMADO';
+
+export interface BeneficiaryEnrollment {
+  id: string;
+  person_id: string;
+  numero_carteirinha: string;
+  plano_codigo: string | null;
+  plano_nome: string | null;
+  status_inscricao: EnrollmentStatus;
+  tipo_contratacao: TipoContratacao;
+  contrato_codigo: string | null;
+  estipulante_pj_nome: string | null;
+  estipulante_pj_cnpj: string | null;
+  data_adesao: string | null;
+  data_cancelamento: string | null;
+  abrangencia: string | null;
+  acomodacao: string | null;
+  segmentacao_assistencial: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  criado_por: string | null;
+}
+
+export interface RegionalMapping {
+  id: string;
+  municipio: string;
+  uf: string;
+  codigo_ibge: string | null;
+  regional_operacional: string;
+  ativo: boolean;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export type BeneficiaryPapel =
+  | 'TITULAR'
+  | 'DEPENDENTE'
+  | 'REPRESENTANTE_LEGAL'
+  | 'FALECIDO'
+  | 'OUTRO';
+
+export interface ProcessBeneficiary {
+  id: string;
+  process_id: string;
+  person_id: string;
+  enrollment_id: string | null;
+  papel: BeneficiaryPapel;
+  is_principal: boolean;
+  representa_person_id: string | null;
+  snapshot_municipio: string | null;
+  snapshot_uf: string | null;
+  snapshot_regional: string | null;
+  snapshot_idade_na_data: number | null;
+  snapshot_data_referencia: string | null;
+  fonte_consulta: string | null;
+  confirmado: boolean;
+  criado_em: string;
+  atualizado_em: string;
+  criado_por: string | null;
+  revisado_por: string | null;
+  revisado_em: string | null;
+}
+
+export interface ProcessBeneficiarySummary {
+  process_beneficiary_id: string;
+  process_id: string;
+  papel: BeneficiaryPapel;
+  is_principal: boolean;
+  confirmado: boolean;
+  snapshot_municipio: string | null;
+  snapshot_uf: string | null;
+  snapshot_regional: string | null;
+  snapshot_idade_na_data: number | null;
+  snapshot_data_referencia: string | null;
+  fonte_consulta: string | null;
+  person_id: string;
+  nome_completo: string;
+  cpf: string | null;
+  data_nascimento: string | null;
+  cns: string | null;
+  enrollment_id: string | null;
+  numero_carteirinha: string | null;
+  plano_nome: string | null;
+  tipo_contratacao: TipoContratacao | null;
+  status_inscricao: EnrollmentStatus | null;
+  estipulante_pj_nome: string | null;
+  estipulante_pj_cnpj: string | null;
+}
