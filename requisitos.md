@@ -1,187 +1,106 @@
-# Levantamento de requisitos — saneamento e classificação de processos
+# Levantamento de requisitos — Responsividade da tela de Processos
 
 **Sistema:** SB Gestão Jurídica  
-**Tela analisada:** Gestão de Processos (`/processos`) e detalhe de processo  
-**Data do levantamento:** 29/09/2026  
-**Objetivo:** especificar a correção dos filtros por UF e o preenchimento assistido por IA do polo passivo (rés) e da competência de origem.
+**Tela:** Gestão de Processos (`/processos`)  
+**Data da análise:** 29/09/2026  
+**Objetivo:** eliminar a rolagem horizontal na tela de processos sem ocultar informações essenciais nem prejudicar filtros e ações.
 
-## 1. Resumo executivo
+## 1. Contexto observado
 
-A listagem apresenta 758 processos, mas o filtro de UF oferece somente 12 opções: SP, RJ, MG, BA, DF, PR, RS, GO, PE, ES, SC e CE. O detalhe do processo mostra UFs ausentes desse filtro. No caso **0802191-66.2026.8.15.7701**, a jurisdição é PB, embora PB não esteja entre as opções. Para **0800883-19.2025.8.10.0151**, o detalhe informa Santa Inês–MA, e MA também não está entre as opções. A falha impede filtrar e segmentar toda a carteira por estado.
+A tela reúne cabeçalho e navegação lateral, controles de busca e filtros, e uma listagem extensa. A grade apresenta sete campos: **Processo / Demanda, Autor, Empresa Vinculada, Próximo Prazo, Criticidade, Responsável e Status**. A inspeção visual mostra que a tabela reserva bastante largura para várias colunas simultaneamente; textos extensos (nomes, empresas e prazos) ocupam múltiplas linhas ou aparecem truncados. A barra lateral fixa também reduz a largura disponível ao conteúdo.
 
-No detalhe do primeiro caso, a seção **RÉS (separado da empresa do contrato)** informa “Nenhuma ré cadastrada”, embora a timeline tenha interpretações da IA registrando ação contra Saúde Brasil e Hub Health. O sistema já tem eventos de comunicação interpretada e origem atribuída a `GEMINI_AUTOMATICO`, mas essa extração não está refletida no cadastro estruturado de rés. A seção **COMPETÊNCIA DE ORIGEM** informa “Origem pendente — Nenhuma comunicação elegível vinculada ao processo”, apesar de haver comunicações recebidas e interpretadas na timeline. Isso sugere uma lacuna entre triagem/interpretação e critérios de elegibilidade/vínculo usados para atualizar os campos estruturados.
+Na faixa de filtros existem controles para status, empresa, réu, competência (ano/mês), região/UF, procedimento/classe, segmento, prioridade e ordenação, além de busca, inclusão de arquivados e ação Novo Processo. A quantidade e largura desses controles pode contribuir para overflow em larguras menores.
 
-## 2. Evidências observadas
+**Limite da análise:** foi possível inspecionar a interface em execução, mas não havia código-fonte do sistema neste workspace. As causas técnicas abaixo são hipóteses a validar durante a implementação, não diagnóstico do CSS/DOM.
 
-| Item | Evidência na aplicação | Consequência |
-|---|---|---|
-| Cobertura de UF incompleta | Filtro oferece 12 UFs; processo `0802191-66.2026.8.15.7701` mostra UF PB | Processos da PB não podem ser filtrados diretamente por UF |
-| Outra UF ausente | `0800883-19.2025.8.10.0151` mostra Santa Inês–MA | Processos do MA também ficam fora da lista de opções |
-| Rés sem cadastro estruturado | No processo PB, seção própria de rés está vazia e separa explicitamente rés da empresa do contrato | Filtros/relatórios por ré não refletem o que a IA já encontrou na timeline |
-| Evidência textual de rés | IA descreve ação “em face de Saúde Brasil e Hub Health” em mais de um evento | Há insumo para extração, mas com múltiplas rés e necessidade de preservar cada uma |
-| Competência pendente | Campo declara que nenhuma comunicação elegível está vinculada | A competência não é derivada ou a elegibilidade/vinculação falha apesar dos e-mails interpretados |
-| Conteúdo de partes contaminado | A listagem mostra “Não identificado” e, em outros casos, fragmentos como “Aguardamos”, “Decisão” ou trechos de texto no lugar do nome do autor | A extração genérica de partes pode estar capturando texto do corpo; a classificação do réu precisa usar contexto processual |
-| Contagem inconsistente | Cabeçalho mostra 758; tabela anuncia “0–500 of 759 items” | Exibir/filtrar carteiras exige uma única fonte e regra consistente de contagem/paginação |
+## 2. Problema e impacto
 
-## 3. Objetivos do produto
+Em viewports menores que a largura efetivamente exigida pelo conteúdo, a tela requer deslocamento horizontal para alcançar informações ou ações. Isso aumenta o esforço de leitura, dificulta comparar um processo com seus dados associados e prejudica o uso em notebook estreito, tablet e celular. A correção não deve apenas esconder o overflow: os dados e ações necessários precisam continuar acessíveis e compreensíveis.
 
-1. Permitir filtrar os processos por qualquer UF brasileira presente na carteira.
-2. Classificar cada ré em categorias operacionais **SB Saúde**, **San Miguel** ou **Outros**, preservando o nome jurídico encontrado e as demais rés do processo.
-3. Preencher competência de origem com valor rastreável, usando regra de negócio aprovada e evidência de origem.
-4. Integrar as saídas da IA ao registro estruturado de processo sem substituir silenciosamente dados confirmados por humanos.
-5. Tornar resultado, confiança, evidência e situação de revisão visíveis para operação jurídica.
-6. Permitir execução retroativa sobre a carteira existente, com prévia, auditoria e reprocessamento idempotente.
+## 3. Objetivo de produto
 
-## 4. Escopo funcional
+A tela de Processos deve caber na largura disponível do viewport em todos os breakpoints suportados. O usuário deve conseguir consultar registros, usar filtros, identificar prazo/criticidade/status e abrir um processo sem rolagem horizontal da página ou de um contêiner da listagem.
 
-### 4.1 Filtro de UF
+## 4. Requisitos funcionais
 
-- Carregar o conjunto de UFs a partir dos processos disponíveis ou de uma lista nacional de 27 UFs (26 estados + DF), em vez de uma lista manual incompleta.
-- Normalizar UF para sigla oficial em maiúsculas, removendo espaços e aceitando nomes completos somente na entrada.
-- Incluir processos com UF ausente/inválida em opção explícita **“Não informado”**; não os misturar com estado conhecido.
-- Definir se UFs sem resultados continuam visíveis. Recomendação: lista completa e estável de 27 UFs, com contagem zero, e “Não informado” quando aplicável.
-- Filtrar de forma consistente na listagem, contagem total, paginação e exportações/relatórios que compartilhem esse filtro.
-- Garantir que o filtro use a UF processual do foro/jurisdição, não UF do endereço de parte ou da empresa vinculada.
-- Se a UF estiver em branco mas número CNJ confiável existir, permitir inferência pelo segmento de tribunal da numeração somente como regra determinística validada; registrar origem e confiança. Não inferir pela cidade ou empresa.
+### RF-01 — Conteúdo sem overflow horizontal
 
-### 4.2 Extração e classificação de rés
+O conteúdo principal, cabeçalho, área de filtros, listagem e paginação devem ajustar-se à largura disponível. Nenhum elemento pode ampliar a largura do documento ou exigir rolagem horizontal.
 
-- Usar IA embarcada para ler fontes disponíveis e vinculadas ao processo: partes estruturadas existentes, petição inicial/documentos, comunicações elegíveis vinculadas, metadados e interpretações prévias. Evitar usar texto da timeline sem relação com o processo ou conteúdo truncado.
-- Extrair **todas** as partes do polo passivo, com nome original, identificador fiscal se encontrado, papel processual (ré principal, solidária, subsidiária, não identificada ou outra), trecho de evidência e documento/fonte de origem.
-- Separar rés de autor(es), representantes, advogados, prestadores, operadoras mencionadas apenas como contexto, empresa contratante e empresa vinculada ao contrato.
-- Classificar individualmente cada ré em `SB_SAUDE`, `SAN_MIGUEL`, `OUTROS` ou `INDETERMINADO`, com nome jurídico canônico e aliases reconhecidos, segundo catálogo mantido por administradores.
-- Não supor que empresa vinculada = ré. A própria tela informa que “Rés” é separado da empresa do contrato.
-- Preservar co-rés: caso a ação seja contra Saúde Brasil **e** Hub Health, armazenar ambas, classificar Saúde Brasil como SB Saúde se o catálogo confirmar, e Hub Health separadamente como Outro ou categoria adicional, sem descartar a segunda.
-- Suportar nomes com variação de acento, caixa, pontuação, abreviações, nome fantasia e razão social. CNPJ/CPF normalizado e validado tem precedência sobre similaridade textual.
-- Se o texto mencionar “Saúde Brasil” sem razão social/CNPJ ou em contexto ambíguo, retornar sugestão com confiança e evidência; abaixo do limiar aprovado, exigir revisão humana.
-- Não classificar como San Miguel por aproximação de texto sem alias/identificador confirmado. A lista canônica de razões sociais, CNPJs e aliases de SB Saúde e San Miguel deve ser fornecida e aprovada pelo negócio.
-- Permitir correção manual, associação/desassociação, inclusão e remoção de ré conforme permissões; correções humanas passam a ser fonte autoritativa e devem gerar trilha de auditoria.
-- Oferecer estado operacional: `pendente`, `sugerido`, `confirmado_automaticamente`, `confirmado_humano`, `revisão_necessária`, `falha`.
+### RF-02 — Navegação adaptável
 
-### 4.3 Competência de origem
+A navegação lateral deve reduzir sua ocupação conforme o breakpoint: pode recolher-se em menu acionável ou converter-se em navegação compacta. O estado recolhido deve continuar oferecendo acesso identificável às seções e preservar acesso por teclado e leitor de tela.
 
-- Definir competência como período de origem (`AAAA-MM`) e armazenar separadamente a data exata da evidência e o tipo de data usado.
-- Criar política de precedência configurável. Alternativas que o negócio precisa decidir:
-  1. competência/período explicitamente escrito no documento;
-  2. data de distribuição/ajuizamento;
-  3. primeira comunicação jurídica elegível recebida;
-  4. data de abertura/cadastro do processo.
-- Recomendação inicial: usar competência explicitamente informada em fonte processual; se ausente, usar data de distribuição/ajuizamento documentada. Usar primeiro recebimento de comunicação apenas se a definição operacional de “competência de origem” for competência de entrada da carteira, e nunca confundir com data de atualização, evento ou prazo citado no texto.
-- Cada valor deve guardar `competencia_ano_mes`, data-base, regra aplicada, origem (tipo e identificador da comunicação/documento), trecho de evidência, confiança, data de processamento e versão do modelo/regra.
-- Não selecionar automaticamente datas soltas do corpo (audiência, prazo, vigência, citação de evento ou histórico) como competência.
-- Se fontes divergirem, o modelo deve retornar candidatos e evidências e solicitar revisão; uma data de cadastro não pode substituir competência jurídica confirmada sem regra definida.
-- A elegibilidade e vínculo da comunicação devem ser verificáveis: processo/numeração associada, tipo de comunicação aceito, data válida, conteúdo não duplicado e não irrelevante. A tela deve explicar pendência com motivo acionável.
-- “Sem competência” precisa ser um estado nulo explícito, distinto de erro de extração e de processamento pendente.
+### RF-03 — Filtros reorganizados
 
-### 4.4 IA e fluxo de processamento
+Os filtros devem se reorganizar em linhas/colunas responsivas, ocupar a largura disponível e manter rótulos/valores legíveis. Em telas estreitas, filtros secundários podem ser agrupados em painel expansível “Filtros”, mantendo busca, filtros principais, indicação de filtros ativos e ação para limpar filtros fáceis de localizar.
 
-- Acionar extração ao criar processo, anexar documento ou vincular comunicação elegível; reprocessar quando uma dessas fontes mudar.
-- Permitir reprocessamento manual por processo e em lote, com seleção/estimativa de impacto antes da execução retroativa.
-- Tornar o processo idempotente: repetir uma execução com mesmas fontes não cria rés duplicadas nem eventos repetidos.
-- Persistir resultado estruturado e metadados de execução. Falhas devem ser retentáveis e não apagar último resultado confirmado.
-- Usar a IA já embarcada/configurada no sistema; não enviar documentos ou dados jurídicos a serviço externo novo como parte desta correção.
-- Definir limites de confiança por campo e critérios diferentes para correspondência de CNPJ, razão social, nome fantasia e evidência textual.
-- Retornar JSON/schema validado, rejeitar nomes vazios, categorias fora do enum e competência em formato inválido.
-- Tratar fonte sem conteúdo, documento ilegível, OCR com baixa qualidade, processo com múltiplas partes e textos contraditórios.
+### RF-04 — Listagem apropriada ao dispositivo
 
-## 5. Requisitos de dados e integração
+Em desktop, manter a leitura tabular com as colunas relevantes, dimensionando-as de forma flexível. Em tablet/celular, apresentar cada registro em cartão ou linha empilhada, com nome do campo associado ao valor. Não reduzir a tabela a ponto de tornar conteúdo ilegível nem depender de scroll horizontal.
 
-Confirmar esquema atual antes de implementar. O produto indica `public.processes` como fonte da listagem e mostra seção própria de rés, mas a tela não permite identificar a tabela/campos persistidos. Levantar:
+### RF-05 — Priorização e acesso aos dados
 
-- campo atual de UF, comarca e município; valores legados e constraints;
-- tabelas de documentos, comunicações, eventos de timeline, interpretações de IA e relação comunicação–processo;
-- tabela/estrutura de rés, enums, chaves, unicidade e políticas RLS;
-- campo atual de competência e condição de “comunicação elegível”;
-- origem, logs, fila de exceções, retries e limites de uso da IA;
-- APIs/consultas da listagem, contagem, filtro e paginação;
-- permissões para revisão/edição e auditoria.
+Na apresentação compacta, destacar número do processo/demanda, status, próximo prazo e criticidade. Autor, empresa vinculada e responsável também devem continuar acessíveis sem abrir outro processo; podem aparecer em seções secundárias do cartão ou em expansão acessível. A ação de abrir deve permanecer evidente.
 
-Dados recomendados por ré: `process_id`, `nome_original`, `nome_canonico`, `documento_normalizado`, `classificacao_grupo`, `papel_processual`, `status_classificacao`, `confianca`, `evidencia_texto`, `source_type`, `source_id`, `model_version`, `reviewed_by`, `reviewed_at`, `created_at`, `updated_at`.
+### RF-06 — Textos longos e valores
 
-Dados recomendados de competência: `process_id`, `competencia_ano_mes`, `data_base`, `regra_aplicada`, `status`, `confianca`, `evidencia_texto`, `source_type`, `source_id`, `model_version`, `reviewed_by`, `reviewed_at`, timestamps.
+Números processuais e textos longos devem quebrar linha de modo previsível ou ser limitados visualmente com acesso ao texto integral por mecanismo acessível (por exemplo, expansão/tooltip que também funcione por foco e toque). Dados não podem sobrepor outras colunas/cartões. Datas, badges e nomes de status devem manter significado completo.
 
-Requisitos técnicos do banco: migração compatível com dados legados; índices em `uf`, competência e classificação/grupo de ré; chave idempotente por processo + parte/documento; RLS de leitura/escrita de acordo com perfil; histórico de alterações sem armazenar cópias desnecessárias de documentos; atualização da listagem evitando N+1.
+### RF-07 — Controles de ação
 
-## 6. Regras de negócio e prioridades
+Novo Processo, busca, atualização, ordenação, filtros, inclusão de arquivados, abertura de registro, paginação e demais ações devem continuar disponíveis e operáveis nas larguras suportadas. Controles não devem ficar cortados ou exigir alvo de toque inadequadamente pequeno.
 
-| Prioridade | Requisito | Justificativa |
-|---|---|---|
-| P0 | Exibir e filtrar as UFs faltantes PB e MA e cobrir todas as UFs válidas | Corrige defeito observável na tela |
-| P0 | Persistir categoria por ré separada da empresa vinculada | Evita classificação jurídica incorreta |
-| P0 | Definir catálogo oficial de SB Saúde e San Miguel | Sem identidade canônica, classificação confiável é impossível |
-| P0 | Definir evento/data que constitui “competência de origem” | O estado atual de pendência não esclarece a regra pretendida |
-| P1 | Extrair múltiplas rés com trecho e fonte | Há exemplos com Saúde Brasil e Hub Health |
-| P1 | Limite de confiança e fila/revisão humana | Evita preencher processo jurídico ambíguo como fato |
-| P1 | Reprocessamento retroativo auditável e idempotente | Necessário para corrigir carteira existente |
-| P2 | Contagens, exportação e painéis consistentes | Evita divergência entre filtro e indicadores |
+### RF-08 — Estados e dados variáveis
 
-## 7. Requisitos de interface
+A responsividade deve ser preservada com rótulos longos, nomes de empresa extensos, autor não identificado, dados ausentes, vários autores, textos de prazo vencido/sem prazo e combinações de filtros. Estado sem resultados, carregamento e erro também devem caber no viewport.
 
-- Exibir a UF normalizada e, quando necessário, um indicador “UF inferida” com fonte e possibilidade de correção.
-- Atualizar filtro de UF com estados completos, contagens e “Não informado”.
-- Na listagem, acrescentar/permitir filtrar por classificação de ré sem confundir com empresa vinculada; manter opção “Todos”, SB Saúde, San Miguel, Outros, Não identificado e, se houver múltiplas rés, sinalizar isso.
-- No detalhe, para cada ré, exibir nome canônico, classificação, papel, documento mascarado conforme perfil, confiança, trecho de evidência, fonte e situação da revisão.
-- Na competência, exibir mês/ano, regra aplicada, data-base, origem e estado. Em pendência, explicar o motivo (por exemplo: “sem documento elegível vinculado” ou “duas datas candidatas divergentes”).
-- Disponibilizar ações claras de confirmar, corrigir, adicionar/remover e solicitar reprocessamento, com confirmação da alteração antes de sobrescrever valor humano confirmado.
-- Diferenciar resultado IA de resultado confirmado por pessoa; não apresentar sugestão como dado validado.
+## 5. Requisitos não funcionais e acessibilidade
 
-## 8. Requisitos não funcionais
+- **RNF-01:** nenhuma rolagem horizontal da página ou de contêiner interno da listagem nos viewports de aceite abaixo.
+- **RNF-02:** zoom do navegador em 200% não deve cortar ações ou conteúdo essencial; o layout pode refluír verticalmente.
+- **RNF-03:** foco de teclado visível e ordem de tabulação lógica; filtros agrupados e navegação recolhida com nomes acessíveis.
+- **RNF-04:** contraste e distinção de criticidade/status não podem depender somente de cor.
+- **RNF-05:** preservar conteúdo, ordenação, filtros, ação de abrir registro e demais comportamentos existentes.
+- **RNF-06:** evitar mudanças bruscas de layout ao carregar dados e manter desempenho aceitável na listagem atual (centenas de registros).
 
-- **Precisão e segurança jurídica:** resultado automático só pode ser gravado segundo limiar acordado e evidência verificável; baixa confiança vai para revisão.
-- **Rastreabilidade:** auditar valor anterior/novo, usuário ou processo IA, fonte, regra/modelo e horário.
-- **Segurança:** aplicar RLS e permissões atuais; minimizar acesso e exposição de documentos, CPF/CNPJ e dados sensíveis.
-- **Desempenho:** filtros e contagens não devem requerer uma chamada de IA por linha nem varredura integral em cada interação.
-- **Resiliência:** timeout, indisponibilidade ou erro de IA não pode bloquear abertura/listagem do processo nem limpar valores existentes.
-- **Observabilidade:** métricas de volume processado, acerto/revisão, falhas, tempo e custo/uso da IA, por versão e lote.
-- **Reprodutibilidade:** registrar versões de prompt, modelo e regras de normalização para explicar resultados históricos.
-- **Compatibilidade:** não quebrar dados e integrações existentes nem alterar o significado da empresa vinculada.
+## 6. Breakpoints e cobertura mínima proposta
 
-## 9. Critérios de aceite
+Validar ao menos as larguras CSS: **1920, 1440, 1280, 1024, 768, 390 e 320 px**, em orientação retrato e paisagem onde aplicável. A implementação pode escolher breakpoints diferentes se a composição demonstrar comportamento adequado. Incluir escala de zoom de 200% em desktop e mobile viewport com densidade padrão.
 
-1. O filtro inclui PB e MA e qualquer outra UF presente; todas as UFs brasileiras suportadas podem ser selecionadas.
-2. A filtragem por UF coincide com a UF de jurisdição do detalhe e a contagem/paginação exibem o mesmo conjunto.
-3. UF nula/inválida aparece em “Não informado” e nunca é classificada silenciosamente por empresa/endereço.
-4. Dada evidência inequívoca com razão social ou identificador pertencente ao catálogo, a IA cria/atualiza a ré e classifica no grupo correspondente, mantendo nome e fonte.
-5. Uma ação contra duas ou mais rés preserva todas as partes e papéis; a empresa vinculada ao contrato não é automaticamente adicionada como ré.
-6. Menção ambígua, conflitante, truncada ou abaixo do limiar não é confirmada automaticamente e fica em revisão com evidências/candidatos.
-7. Reexecução com as mesmas fontes não duplica rés, competência nem auditoria de criação; correção humana não é sobrescrita por reprocessamento ordinário.
-8. A competência segue a regra aprovada, guarda mês/ano, data-base e fonte, e não captura data de audiência/prazo por engano.
-9. Sem fonte elegível ou com fontes conflitantes, o registro permanece sem competência ou pendente com motivo claro; a falha é distinguível de “sem competência”.
-10. A execução retroativa oferece prévia, total de afetados, estimativa operacional, erros e resultados revisáveis sem aplicar mudanças ocultas.
-11. Alterações manuais registram responsável, instante, valor anterior e novo; acesso segue as permissões existentes.
-12. Problemas de IA deixam processo e listagem acessíveis e preservam último valor confirmado.
+## 7. Critérios de aceite
 
-## 10. Cenários de validação
+1. Em cada largura proposta, `document.documentElement.scrollWidth` não excede `clientWidth` por overflow de layout; nenhum contêiner da tela requer scroll horizontal para visualizar a lista ou filtros.
+2. Cabeçalho, navegação, filtros e ações não se sobrepõem, não ficam cortados e podem ser alcançados por teclado/toque.
+3. Em desktop, os sete campos da listagem permanecem identificáveis e os dados de cada linha se alinham à coluna correta.
+4. Em tablet/celular, registros adotam uma apresentação responsiva sem scroll horizontal; número do processo, prazo, criticidade e status são localizáveis, e os demais campos ficam acessíveis no mesmo registro.
+5. Um registro com número longo, nome de autor longo, nome de empresa longo, ausência de valor e prazo vencido não causa overflow nem oculta informação essencial.
+6. Busca, filtros, ordenação, inclusão de arquivados, atualização, Novo Processo, abrir registro e navegação funcionam como antes.
+7. Filtros ativos continuam visíveis/identificáveis quando o painel de filtros estiver recolhido e podem ser removidos individualmente ou limpos.
+8. A 200% de zoom, não há corte horizontal de ações essenciais; o conteúdo reflui e pode crescer verticalmente.
+9. Estados de carregamento, erro e lista vazia não causam overflow horizontal.
 
-- Processos com UFs PB, MA, AC, AM, AP, AL, TO, MS, MT, RN, RO, RR, SE, PI e outras atualmente não listadas.
-- UF em minúscula, com espaços, nome do estado, nula, inválida e divergente entre CNJ e jurisdição cadastrada.
-- Ré com CNPJ válido, CNPJ formatado, razão social completa, acentos divergentes, nome fantasia, alias e erro de digitação.
-- SB Saúde junto com Hub Health; San Miguel junto com outro réu; várias empresas do mesmo grupo; empresa vinculada sem participação no polo passivo.
-- Nome da empresa aparece em narrativa, assinatura de e-mail, remetente, contrato ou parte autora, mas não como ré.
-- Termos “em face de”, “contra”, “requerida”, “ré”, “ré solidária/subsidiária” e textos contraditórios.
-- E-mail citado em mais de um processo, comunicação duplicada, documento OCR ilegível ou número de processo inconsistente.
-- Datas de ajuizamento, distribuição, recebimento, competência explícita, audiência, prazo e data de captura; mais de uma candidata.
-- Reprocessamento antes/depois de validação humana, alteração de documento, falha de IA, fila, retry e concorrência entre duas revisões.
+## 8. Hipóteses técnicas para investigação
 
-## 11. Plano de entrega recomendado
+Validar no código e no DOM, sem presumir que sejam a causa definitiva:
 
-1. **Diagnóstico técnico:** conferir esquema Supabase, consultas, origem de `UF`, entidades de comunicação/documento e o código que compõe a lista de UFs e a seção de competência/rés.
-2. **Decisões de negócio:** aprovar catálogo de entidades, regra de competência, limiar de confiança, política de confirmação e escopo/horário de execução retroativa.
-3. **Correção de UF:** normalização e filtro completo, com cobertura de todas as UFs e “Não informado”.
-4. **Modelo persistido e auditoria:** completar/ajustar estruturas de rés e competência, índices, RLS e histórico.
-5. **Pipeline de IA:** extração com saída estruturada, evidências, confiança, deduplicação, estado de revisão, retries e respeito a dados humanos confirmados.
-6. **Interface operacional:** expor filtros, evidências, estado e revisão humana no detalhe e na listagem.
-7. **Retroativo:** gerar prévia por lote, validar amostra jurídica, executar em lotes idempotentes e disponibilizar relatório de pendências/erros.
-8. **Aceite operacional:** revisar amostra balanceada por UF, grupo de ré, pluralidade de partes e qualidade da fonte; liberar gradualmente e acompanhar métricas.
+- largura mínima fixa, `min-width` ou `width` maior que o contêiner na tabela, cards, filtros ou conteúdo principal;
+- tabela com colunas não flexíveis ou conteúdo com `white-space: nowrap`/strings longas sem quebra;
+- itens de flex/grid sem `min-width: 0`, causando expansão pelo tamanho intrínseco;
+- sidebar fixa sem ajuste do espaço reservado no conteúdo principal;
+- filtros em linha sem wrapping ou grid com colunas fixas;
+- padding/gap acumulado que excede a largura disponível;
+- overflow criado em modal, cabeçalho ou elementos de status/badges.
 
-## 12. Decisões ainda necessárias
+Evitar tratar o sintoma com `overflow-x: hidden` global antes de localizar o elemento causador, pois isso pode cortar conteúdo e controles.
 
-1. **Catálogo canônico:** informar razões sociais/CNPJs e aliases válidos de SB Saúde e San Miguel. A tela também cita Hub Health; confirmar se entra como categoria própria, “Outros” ou futura categoria de filtro.
-2. **Definição de competência:** confirmar se competência significa período expresso na peça, mês da distribuição/ajuizamento, primeira entrada de comunicação ou outra regra. O detalhe atual chama o campo de “Competência de origem” e depende de comunicação elegível, mas ainda marca pendência apesar de eventos na timeline.
-3. **Automação e confirmação:** aprovar limiar mínimo para gravação automática e quem revisa casos ambíguos. Recomendação: associação por identificador validado pode ser automática; correspondência somente textual fica condicionada à confiança e evidência, caso contrário vai para revisão.
-4. **Retroativo:** definir se a carteira completa deve ser reprocessada, em qual janela e com que prioridade operacional. A tela mostra 758 processos e a fila administrativa indica 536 exceções aguardando análise; volume e concorrência precisam ser considerados.
-5. **Escopo do filtro de ré:** decidir se filtro representa qualquer ré do processo, ré principal ou agrupamento por entidades. Recomendação: processo aparece no filtro do grupo se ao menos uma ré pertencer ao grupo, mantendo sinalização de múltiplas rés.
+## 9. Fora de escopo
 
-## 13. Fora do escopo deste levantamento
+- Redesenho visual completo ou alteração de identidade visual.
+- Alteração de regras de negócio, dados, filtros ou permissões.
+- Redução permanente das colunas disponíveis no desktop sem aprovação do produto.
+- Modificações em outras telas, exceto ajustes compartilhados estritamente necessários ao layout base.
 
-Este documento especifica requisitos a partir da tela e dos dados visíveis. Não confirma o esquema atual do banco, a disponibilidade de documentos originais, os prompts/modelos configurados, nem altera registros da carteira. Esses pontos devem ser verificados na etapa de diagnóstico antes de dimensionar a implementação.
+## 10. Definição de pronto
+
+Requisitos implementados e critérios de aceite verificados nos breakpoints e estados variáveis acima; nenhum scroll horizontal permanece em processos; acessibilidade básica e funcionalidades preservadas; evidências da validação registradas na revisão técnica.

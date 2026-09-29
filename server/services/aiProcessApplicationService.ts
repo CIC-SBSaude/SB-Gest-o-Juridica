@@ -445,9 +445,17 @@ export async function applyAiInterpretation(params: {
       pRoleType === 'REU' ||
       /\b(REU|RE|REQUERID|DEMANDAD|POLO\s+PASSIVO)\b/i.test(pRole);
 
-    if (isReu) {
+    // Requisito 3.1 & 7.2: Não converter autores, beneficiários, advogados, representantes ou terceiros em rés
+    const isExcluded =
+      pRoleType === 'AUTOR' ||
+      pRoleType === 'BENEFICIARIO' ||
+      pRoleType === 'TERCEIRO' ||
+      /\b(AUTOR|AUTORA|BENEFICIARI|ADVOGAD|REPRESENTANTE|TESTEMUNHA|PERIT|JUIZ|PROMOTOR)\b/i.test(pRole);
+
+    if (isReu && !isExcluded) {
       candidateDefendants.push({
         nome: pName,
+        documento: party?.document?.value || null,
         papel: 'REU',
         evidenciaTexto: party?.name?.evidence || party?.role?.evidence || null,
         evidenciaFonte: 'EMAIL',
@@ -481,10 +489,14 @@ export async function applyAiInterpretation(params: {
       actorId,
     });
     defendantsCreatedCount = defRes.createdCount;
+    const hasUnconfirmed = defRes.defendants.some((d: any) => !d.confirmado);
+
     decisions['res'] = {
       fieldName: 'process_defendants',
       fieldLabel: 'Polo Passivo (Rés)',
-      decision: defendantsCreatedCount > 0 ? 'APLICADO_AUTOMATICAMENTE' : 'IGNORADO_CAMPO_PREENCHIDO',
+      decision: defendantsCreatedCount > 0
+        ? (hasUnconfirmed ? 'CRIADO_SUGESTAO_REVISAO' : 'APLICADO_AUTOMATICAMENTE')
+        : 'IGNORADO_CAMPO_PREENCHIDO',
       confidence: 0.9,
       threshold: 0.85,
       appliedValue: candidateDefendants.map((c) => c.nome).join(', '),
@@ -494,11 +506,16 @@ export async function applyAiInterpretation(params: {
   }
 
   // Competência de Origem (process_origin)
+  const explicitOriginDate = ai.identification?.dataOrigem?.value;
+  const explicitOriginConf = ai.identification?.dataOrigem?.confidence ?? 0;
+  const useExplicit = Boolean(explicitOriginDate && explicitOriginConf >= 0.85);
+
   const originRes = await ensureProcessOrigin({
     supabase,
     processId,
     emailId,
     receivedAt,
+    explicitDate: useExplicit ? explicitOriginDate : null,
     actorId,
     definidoPor: 'IA',
   });
@@ -507,10 +524,23 @@ export async function applyAiInterpretation(params: {
       fieldName: 'process_origin',
       fieldLabel: 'Competência de Origem',
       decision: 'APLICADO_AUTOMATICAMENTE',
-      confidence: 0.9,
+      confidence: useExplicit ? explicitOriginConf : 0.9,
       threshold: 0.85,
-      appliedValue: receivedAt,
-      reason: 'Competência de origem calculada a partir da comunicação elegível.',
+      appliedValue: useExplicit ? explicitOriginDate : receivedAt,
+      evidence: useExplicit ? ai.identification?.dataOrigem?.evidence : null,
+      reason: useExplicit
+        ? 'Competência de origem definida com base em data declarada no e-mail.'
+        : 'Competência de origem calculada a partir da comunicação elegível.',
+    };
+  } else if (originRes.reason === 'PRESERVED_HUMAN') {
+    decisions['competencia_origem'] = {
+      fieldName: 'process_origin',
+      fieldLabel: 'Competência de Origem',
+      decision: 'IGNORADO_MANUAL_EXISTENTE',
+      confidence: 1.0,
+      threshold: 0.85,
+      appliedValue: null,
+      reason: 'Origem confirmada manualmente pelo operador preservada contra sobrescrita.',
     };
   }
 

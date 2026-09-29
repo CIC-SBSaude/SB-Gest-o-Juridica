@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Search,
@@ -13,13 +13,17 @@ import {
   Calendar,
   Link2,
   ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { Process, ProcessStatus, Company, ProcessSegment } from '../../types/database';
 import { processesService, type ProcessFilters } from '../../services/processesService';
 import type { ProcessSortOption } from '../../utils/processSorting';
 import { companiesService } from '../../services/companiesService';
-import { ProcessStatusBadge, ProcessPriorityBadge } from '../../components/processes/ProcessStatusBadge';
+import { ProcessStatusBadge, ProcessPriorityBadge, STATUS_CONFIG } from '../../components/processes/ProcessStatusBadge';
 import { ProcessModal } from '../../components/processes/ProcessModal';
 import { CompanyModal } from '../../components/companies/CompanyModal';
 import { ProcessDetailsModal } from '../../components/processes/ProcessDetailsModal';
@@ -67,6 +71,205 @@ export const ProcessesPage: React.FC = () => {
   const [classeFilter, setClasseFilter] = useState<string | 'ALL'>('ALL');
   const [subclasseFilter, setSubclasseFilter] = useState<string>('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
+
+  // Contagem de filtros secundários ativos (para o badge do botão "Filtros avançados")
+  const activeSecondaryFiltersCount = useMemo(() => {
+    let count = 0;
+    if (reuFilter !== 'ALL') count++;
+    if (competenciaAnoFilter !== 'ALL') count++;
+    if (competenciaMesFilter !== 'ALL') count++;
+    if (ufFilter !== 'ALL') count++;
+    if (municipioFilter.trim() !== '') count++;
+    if (classeFilter !== 'ALL') count++;
+    if (subclasseFilter.trim() !== '') count++;
+    if (segmentoFilter !== 'ALL') count++;
+    if (priorityFilter !== 'ALL') count++;
+    if (sortOption !== 'OPERATIONAL_PRIORITY') count++;
+    if (includeArchived) count++;
+    return count;
+  }, [
+    reuFilter,
+    competenciaAnoFilter,
+    competenciaMesFilter,
+    ufFilter,
+    municipioFilter,
+    classeFilter,
+    subclasseFilter,
+    segmentoFilter,
+    priorityFilter,
+    sortOption,
+    includeArchived,
+  ]);
+
+  // Lista de filtros ativos para exibição dos chips com remoção individual (RF-03 & Critério 7)
+  const activeFilters = useMemo(() => {
+    const list: { key: string; label: string; onClear: () => void }[] = [];
+
+    if (searchQuery.trim()) {
+      list.push({
+        key: 'search',
+        label: `Busca: "${searchQuery.trim()}"`,
+        onClear: () => setSearchQuery(''),
+      });
+    }
+
+    if (statusFilter !== 'ALL') {
+      const statusLabel = STATUS_CONFIG[statusFilter]?.label || statusFilter;
+      list.push({
+        key: 'status',
+        label: `Status: ${statusLabel}`,
+        onClear: () => setStatusFilter('ALL'),
+      });
+    }
+
+    if (companyFilter !== 'ALL') {
+      const comp = companies.find((c) => c.id === companyFilter);
+      list.push({
+        key: 'company',
+        label: `Empresa: ${comp?.nome || 'Selecionada'}`,
+        onClear: () => setCompanyFilter('ALL'),
+      });
+    }
+
+    if (reuFilter !== 'ALL') {
+      const reuLabels: Record<string, string> = {
+        SB_SAUDE: 'SB Saúde',
+        SAN_MIGUEL: 'San Miguel',
+        OUTROS: 'Outros réus',
+        NAO_IDENTIFICADO: 'Não identificado',
+      };
+      list.push({
+        key: 'reu',
+        label: `Réu: ${reuLabels[reuFilter] || reuFilter}`,
+        onClear: () => setReuFilter('ALL'),
+      });
+    }
+
+    if (competenciaAnoFilter !== 'ALL') {
+      list.push({
+        key: 'ano',
+        label: competenciaAnoFilter === -1 ? 'Ano: Sem data' : `Ano: ${competenciaAnoFilter}`,
+        onClear: () => setCompetenciaAnoFilter('ALL'),
+      });
+    }
+
+    if (competenciaMesFilter !== 'ALL') {
+      const meses = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      list.push({
+        key: 'mes',
+        label: `Mês: ${meses[competenciaMesFilter as number] || competenciaMesFilter}`,
+        onClear: () => setCompetenciaMesFilter('ALL'),
+      });
+    }
+
+    if (ufFilter !== 'ALL') {
+      list.push({
+        key: 'uf',
+        label: ufFilter === 'NAO_INFORMADO' ? 'UF: Não informado' : `UF: ${ufFilter}`,
+        onClear: () => setUfFilter('ALL'),
+      });
+    }
+
+    if (municipioFilter.trim()) {
+      list.push({
+        key: 'municipio',
+        label: `Município: ${municipioFilter.trim()}`,
+        onClear: () => setMunicipioFilter(''),
+      });
+    }
+
+    if (classeFilter !== 'ALL') {
+      list.push({
+        key: 'classe',
+        label: `Classe: ${classeFilter}`,
+        onClear: () => setClasseFilter('ALL'),
+      });
+    }
+
+    if (subclasseFilter.trim()) {
+      list.push({
+        key: 'subclasse',
+        label: `Subclasse: ${subclasseFilter.trim()}`,
+        onClear: () => setSubclasseFilter(''),
+      });
+    }
+
+    if (segmentoFilter !== 'ALL') {
+      list.push({
+        key: 'segmento',
+        label: `Segmento: ${segmentoFilter}`,
+        onClear: () => setSegmentoFilter('ALL'),
+      });
+    }
+
+    if (priorityFilter !== 'ALL') {
+      list.push({
+        key: 'priority',
+        label: `Prioridade: ${priorityFilter}`,
+        onClear: () => setPriorityFilter('ALL'),
+      });
+    }
+
+    if (sortOption !== 'OPERATIONAL_PRIORITY') {
+      const sortLabels: Record<ProcessSortOption, string> = {
+        OPERATIONAL_PRIORITY: 'Prioridade',
+        PROCESS_NUMBER: 'Número CNJ',
+        LAST_UPDATED: 'Última atualização',
+        NEWEST: 'Mais recentes',
+        OLDEST: 'Mais antigos',
+        CASE_VALUE: 'Valor da causa',
+        NEAREST_DEADLINE: 'Prazo próximo',
+      };
+      list.push({
+        key: 'sort',
+        label: `Ordem: ${sortLabels[sortOption] || sortOption}`,
+        onClear: () => setSortOption('OPERATIONAL_PRIORITY'),
+      });
+    }
+
+    if (includeArchived) {
+      list.push({
+        key: 'archived',
+        label: 'Inclui arquivados',
+        onClear: () => setIncludeArchived(false),
+      });
+    }
+
+    return list;
+  }, [
+    searchQuery,
+    statusFilter,
+    companyFilter,
+    companies,
+    reuFilter,
+    competenciaAnoFilter,
+    competenciaMesFilter,
+    ufFilter,
+    municipioFilter,
+    classeFilter,
+    subclasseFilter,
+    segmentoFilter,
+    priorityFilter,
+    sortOption,
+    includeArchived,
+  ]);
+
+  const handleClearAllFilters = useCallback(() => {
+    setSearchQuery('');
+    setStatusFilter('ALL');
+    setCompanyFilter('ALL');
+    setPriorityFilter('ALL');
+    setSegmentoFilter('ALL');
+    setIncludeArchived(false);
+    setSortOption('OPERATIONAL_PRIORITY');
+    setReuFilter('ALL');
+    setCompetenciaAnoFilter('ALL');
+    setCompetenciaMesFilter('ALL');
+    setUfFilter('ALL');
+    setMunicipioFilter('');
+    setClasseFilter('ALL');
+    setSubclasseFilter('');
+  }, []);
 
   // Estados dos modais
   const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
@@ -459,11 +662,12 @@ export const ProcessesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Barra de Filtros e Busca */}
-      <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Barra de Filtros e Busca (RF-03) */}
+      <div className="bg-white rounded-xl p-3 sm:p-4 border border-slate-200/80 shadow-xs space-y-3">
+        {/* Linha principal: busca + status + empresa + alternador de filtros secundários */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 sm:gap-3">
           {/* Busca textual */}
-          <div className="relative sm:col-span-2">
+          <div className="relative sm:col-span-2 lg:col-span-5 min-w-0">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <input
               id="processes-search-input"
@@ -476,12 +680,12 @@ export const ProcessesPage: React.FC = () => {
           </div>
 
           {/* Filtro por Status */}
-          <div>
+          <div className="lg:col-span-3 min-w-0">
             <select
               id="processes-status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as ProcessStatus | 'ALL')}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-red-500 focus:bg-white transition cursor-pointer"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-red-500 focus:bg-white transition cursor-pointer truncate"
             >
               <option value="ALL">Todos os Status</option>
               <option value="NOVA">Nova Demanda</option>
@@ -496,14 +700,14 @@ export const ProcessesPage: React.FC = () => {
           </div>
 
           {/* Filtro por Empresa vinculada */}
-          <div>
+          <div className="lg:col-span-2 min-w-0">
             <select
               id="processes-company-filter"
               value={companyFilter}
               onChange={(e) => setCompanyFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-red-500 focus:bg-white transition cursor-pointer"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-red-500 focus:bg-white transition cursor-pointer truncate"
             >
-              <option value="ALL">Todas as empresas vinculadas</option>
+              <option value="ALL">Todas as empresas</option>
               {companies.map((comp) => (
                 <option key={comp.id} value={comp.id}>
                   {comp.nome}
@@ -511,222 +715,262 @@ export const ProcessesPage: React.FC = () => {
               ))}
             </select>
           </div>
-        </div>
 
-        {/* Linha de filtros de negócio: Réu, Competência, Região e Classificação Assistencial */}
-        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-3 text-xs text-slate-700">
-          {/* RF02 — Separar Réu: SB Saúde vs San Miguel */}
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500">Réu:</span>
-            <select
-              id="processes-reu-filter"
-              value={reuFilter}
-              onChange={(e) => setReuFilter(e.target.value as any)}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+          {/* Botão para alternar Filtros Avançados / Secundários */}
+          <div className="lg:col-span-2 min-w-0">
+            <button
+              id="toggle-advanced-filters-btn"
+              type="button"
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`w-full inline-flex items-center justify-between px-3 py-2 border rounded-lg text-xs font-semibold transition cursor-pointer ${
+                showAdvancedFilters || activeSecondaryFiltersCount > 0
+                  ? 'bg-red-50/80 border-red-200 text-red-700 hover:bg-red-100/80'
+                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+              title="Exibir ou ocultar filtros secundários"
+              aria-expanded={showAdvancedFilters}
             >
-              <option value="ALL">Todos os Réus</option>
-              <option value="SB_SAUDE">SB Saúde</option>
-              <option value="SAN_MIGUEL">San Miguel</option>
-              <option value="OUTROS">Outros</option>
-              <option value="NAO_IDENTIFICADO">Não identificado</option>
-            </select>
-          </div>
-
-          {/* RF03/RF04 — Competência de Origem (Mês / Ano do 1º e-mail) */}
-          <div className="flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-semibold text-slate-500">Competência:</span>
-            <select
-              id="processes-ano-filter"
-              value={competenciaAnoFilter}
-              onChange={(e) => setCompetenciaAnoFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
-            >
-              <option value="ALL">Ano: Todos</option>
-              <option value={2026}>2026</option>
-              <option value={2025}>2025</option>
-              <option value={2024}>2024</option>
-              <option value={2023}>2023</option>
-              <option value={-1}>Sem competência</option>
-            </select>
-            <select
-              id="processes-mes-filter"
-              value={competenciaMesFilter}
-              onChange={(e) => setCompetenciaMesFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
-            >
-              <option value="ALL">Mês: Todos</option>
-              <option value={1}>01 - Jan</option>
-              <option value={2}>02 - Fev</option>
-              <option value={3}>03 - Mar</option>
-              <option value={4}>04 - Abr</option>
-              <option value={5}>05 - Mai</option>
-              <option value={6}>06 - Jun</option>
-              <option value={7}>07 - Jul</option>
-              <option value={8}>08 - Ago</option>
-              <option value={9}>09 - Set</option>
-              <option value={10}>10 - Out</option>
-              <option value={11}>11 - Nov</option>
-              <option value={12}>12 - Dez</option>
-            </select>
-          </div>
-
-          {/* RF05/RF06 — Região / Foro Processual (27 UFs nacionais + Não informado) */}
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500">Região:</span>
-            <select
-              id="processes-uf-filter"
-              value={ufFilter}
-              onChange={(e) => setUfFilter(e.target.value)}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
-            >
-              <option value="ALL">UF: Todas</option>
-              {BRAZILIAN_UFS.map((uf) => (
-                <option key={uf} value={uf}>
-                  {uf}
-                </option>
-              ))}
-              <option value="NAO_INFORMADO">Não informado</option>
-            </select>
-            <input
-              type="text"
-              value={municipioFilter}
-              onChange={(e) => setMunicipioFilter(e.target.value)}
-              placeholder="Município..."
-              className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
-            />
-
-          </div>
-
-          {/* RF08 — Classificação Assistencial (Bruto e Refinado) */}
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500">Procedimento:</span>
-            <select
-              id="processes-classe-filter"
-              value={classeFilter}
-              onChange={(e) => setClasseFilter(e.target.value)}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
-            >
-              <option value="ALL">Classe: Todas</option>
-              <option value="CONSULTA">Consulta</option>
-              <option value="EXAME">Exame</option>
-              <option value="CIRURGIA">Cirurgia</option>
-              <option value="INTERNACAO">Internação</option>
-              <option value="TERAPIA">Terapia</option>
-              <option value="OUTRO">Outro</option>
-            </select>
-            <input
-              type="text"
-              value={subclasseFilter}
-              onChange={(e) => setSubclasseFilter(e.target.value)}
-              placeholder="Subclasse (hérnia, USG)..."
-              className="w-36 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
-            />
+              <span className="inline-flex items-center gap-1.5 truncate">
+                <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+                <span>Filtros</span>
+                {activeSecondaryFiltersCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-bold shrink-0">
+                    {activeSecondaryFiltersCount}
+                  </span>
+                )}
+              </span>
+              {showAdvancedFilters ? (
+                <ChevronUp className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Linha secundária de filtros: Prioridade e Arquivados */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs text-slate-600">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-semibold text-slate-500">Segmento:</span>
-              <select
-                id="processes-segmento-filter"
-                value={segmentoFilter}
-                onChange={(e) => setSegmentoFilter(e.target.value as ProcessSegment | 'ALL')}
-                className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
-              >
-                <option value="ALL">Todos os Segmentos</option>
-                <option value="ASSISTENCIAL">Assistencial</option>
-                <option value="PRESTADOR">Prestador</option>
-                <option value="OUTRO">Outro</option>
-                <option value="NAO_CLASSIFICADO">Não Classificado</option>
-              </select>
+        {/* Painel expansível de filtros secundários (RF-03) */}
+        {showAdvancedFilters && (
+          <div className="pt-3 border-t border-slate-100 space-y-3 animate-in fade-in">
+            {/* Grid de filtros de negócio: 1 col (mobile), 2 cols (sm/md), 4 cols (xl) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 text-xs">
+              {/* Réu */}
+              <div className="flex flex-col gap-1 min-w-0">
+                <label htmlFor="processes-reu-filter" className="font-semibold text-slate-500 text-[11px]">Réu</label>
+                <select
+                  id="processes-reu-filter"
+                  value={reuFilter}
+                  onChange={(e) => setReuFilter(e.target.value as any)}
+                  className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer min-w-0"
+                >
+                  <option value="ALL">Todos os Réus</option>
+                  <option value="SB_SAUDE">SB Saúde</option>
+                  <option value="SAN_MIGUEL">San Miguel</option>
+                  <option value="OUTROS">Outros</option>
+                  <option value="NAO_IDENTIFICADO">Não identificado</option>
+                </select>
+              </div>
+
+              {/* Competência */}
+              <div className="flex flex-col gap-1 min-w-0">
+                <label className="font-semibold text-slate-500 text-[11px] flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                  Competência
+                </label>
+                <div className="flex gap-1 min-w-0">
+                  <select
+                    id="processes-ano-filter"
+                    value={competenciaAnoFilter}
+                    onChange={(e) => setCompetenciaAnoFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                  >
+                    <option value="ALL">Ano</option>
+                    <option value={2026}>2026</option>
+                    <option value={2025}>2025</option>
+                    <option value={2024}>2024</option>
+                    <option value={2023}>2023</option>
+                    <option value={-1}>Sem data</option>
+                  </select>
+                  <select
+                    id="processes-mes-filter"
+                    value={competenciaMesFilter}
+                    onChange={(e) => setCompetenciaMesFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                  >
+                    <option value="ALL">Mês</option>
+                    <option value={1}>Jan</option>
+                    <option value={2}>Fev</option>
+                    <option value={3}>Mar</option>
+                    <option value={4}>Abr</option>
+                    <option value={5}>Mai</option>
+                    <option value={6}>Jun</option>
+                    <option value={7}>Jul</option>
+                    <option value={8}>Ago</option>
+                    <option value={9}>Set</option>
+                    <option value={10}>Out</option>
+                    <option value={11}>Nov</option>
+                    <option value={12}>Dez</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Região / UF */}
+              <div className="flex flex-col gap-1 min-w-0">
+                <label className="font-semibold text-slate-500 text-[11px]">Região / UF</label>
+                <div className="flex gap-1 min-w-0">
+                  <select
+                    id="processes-uf-filter"
+                    value={ufFilter}
+                    onChange={(e) => setUfFilter(e.target.value)}
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                  >
+                    <option value="ALL">UF: Todas</option>
+                    {BRAZILIAN_UFS.map((uf) => (
+                      <option key={uf} value={uf}>{uf}</option>
+                    ))}
+                    <option value="NAO_INFORMADO">Não informado</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={municipioFilter}
+                    onChange={(e) => setMunicipioFilter(e.target.value)}
+                    placeholder="Município"
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+
+              {/* Procedimento / Classe */}
+              <div className="flex flex-col gap-1 min-w-0">
+                <label htmlFor="processes-classe-filter" className="font-semibold text-slate-500 text-[11px]">Procedimento</label>
+                <div className="flex gap-1 min-w-0">
+                  <select
+                    id="processes-classe-filter"
+                    value={classeFilter}
+                    onChange={(e) => setClasseFilter(e.target.value)}
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                  >
+                    <option value="ALL">Classe: Todas</option>
+                    <option value="CONSULTA">Consulta</option>
+                    <option value="EXAME">Exame</option>
+                    <option value="CIRURGIA">Cirurgia</option>
+                    <option value="INTERNACAO">Internação</option>
+                    <option value="TERAPIA">Terapia</option>
+                    <option value="OUTRO">Outro</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={subclasseFilter}
+                    onChange={(e) => setSubclasseFilter(e.target.value)}
+                    placeholder="Subclasse"
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-slate-500">Prioridade:</span>
-              <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
-              >
-                <option value="ALL">Todas</option>
-                <option value="URGENTE">Urgente</option>
-                <option value="ALTA">Alta</option>
-                <option value="MEDIA">Média</option>
-                <option value="BAIXA">Baixa</option>
-              </select>
-            </div>
+            {/* Linha de controles secundários: segmento, prioridade, ordenação, arquivados */}
+            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-slate-600">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {/* Segmento */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <label htmlFor="processes-segmento-filter" className="font-semibold text-slate-500 shrink-0">Segmento:</label>
+                  <select
+                    id="processes-segmento-filter"
+                    value={segmentoFilter}
+                    onChange={(e) => setSegmentoFilter(e.target.value as ProcessSegment | 'ALL')}
+                    className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer min-w-0"
+                  >
+                    <option value="ALL">Todos</option>
+                    <option value="ASSISTENCIAL">Assistencial</option>
+                    <option value="PRESTADOR">Prestador</option>
+                    <option value="OUTRO">Outro</option>
+                    <option value="NAO_CLASSIFICADO">Não Classificado</option>
+                  </select>
+                </div>
 
-            <div className="flex items-center gap-1.5">
-              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-semibold text-slate-500">Ordenar por:</span>
-              <select
-                id="processes-sort-select"
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value as ProcessSortOption)}
-                className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
-                title="Definir a ordem de exibição dos processos"
-              >
-                <option value="OPERATIONAL_PRIORITY">Prioridade operacional</option>
-                <option value="PROCESS_NUMBER">Número do processo</option>
-                <option value="LAST_UPDATED">Última atualização</option>
-                <option value="NEWEST">Mais recentes</option>
-                <option value="OLDEST">Mais antigos</option>
-                <option value="CASE_VALUE">Valor da causa</option>
-                <option value="NEAREST_DEADLINE">Prazo mais próximo</option>
-              </select>
-            </div>
+                {/* Prioridade */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <label className="font-semibold text-slate-500 shrink-0">Prioridade:</label>
+                  <select
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer min-w-0"
+                  >
+                    <option value="ALL">Todas</option>
+                    <option value="URGENTE">Urgente</option>
+                    <option value="ALTA">Alta</option>
+                    <option value="MEDIA">Média</option>
+                    <option value="BAIXA">Baixa</option>
+                  </select>
+                </div>
 
-            <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={includeArchived}
-                onChange={(e) => setIncludeArchived(e.target.checked)}
-                className="rounded text-red-600 focus:ring-red-500 h-3.5 w-3.5"
-              />
-              <span className="text-slate-600">Incluir arquivados</span>
-            </label>
+                {/* Ordenação */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <label htmlFor="processes-sort-select" className="font-semibold text-slate-500 shrink-0">Ordenar:</label>
+                  <select
+                    id="processes-sort-select"
+                    value={sortOption}
+                    onChange={(e) => setSortOption(e.target.value as ProcessSortOption)}
+                    className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer min-w-0"
+                    title="Definir a ordem de exibição dos processos"
+                  >
+                    <option value="OPERATIONAL_PRIORITY">Prioridade</option>
+                    <option value="PROCESS_NUMBER">Número</option>
+                    <option value="LAST_UPDATED">Última atualização</option>
+                    <option value="NEWEST">Mais recentes</option>
+                    <option value="OLDEST">Mais antigos</option>
+                    <option value="CASE_VALUE">Valor da causa</option>
+                    <option value="NEAREST_DEADLINE">Prazo próximo</option>
+                  </select>
+                </div>
+
+                {/* Incluir arquivados */}
+                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={includeArchived}
+                    onChange={(e) => setIncludeArchived(e.target.checked)}
+                    className="rounded text-red-600 focus:ring-red-500 h-3.5 w-3.5 shrink-0"
+                  />
+                  <span className="text-slate-600 whitespace-nowrap">Incluir arquivados</span>
+                </label>
+              </div>
+            </div>
           </div>
+        )}
 
-          {(searchQuery ||
-            statusFilter !== 'ALL' ||
-            companyFilter !== 'ALL' ||
-            priorityFilter !== 'ALL' ||
-            segmentoFilter !== 'ALL' ||
-            includeArchived ||
-            reuFilter !== 'ALL' ||
-            competenciaAnoFilter !== 'ALL' ||
-            competenciaMesFilter !== 'ALL' ||
-            ufFilter !== 'ALL' ||
-            municipioFilter.trim() !== '' ||
-            classeFilter !== 'ALL' ||
-            subclasseFilter.trim() !== '') && (
+        {/* Chips de filtros ativos com remoção individual e botão de limpar todos (RF-03 & Critério 7) */}
+        {activeFilters.length > 0 && (
+          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-semibold text-slate-400 mr-1">Filtros ativos:</span>
+            {activeFilters.map((f) => (
+              <span
+                key={f.key}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-medium"
+              >
+                <span>{f.label}</span>
+                <button
+                  type="button"
+                  onClick={f.onClear}
+                  className="p-0.5 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title={`Remover filtro ${f.label}`}
+                  aria-label={`Remover filtro ${f.label}`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
             <button
               type="button"
-              onClick={() => {
-                setSearchQuery('');
-                setStatusFilter('ALL');
-                setCompanyFilter('ALL');
-                setPriorityFilter('ALL');
-                setSegmentoFilter('ALL');
-                setIncludeArchived(false);
-                setReuFilter('ALL');
-                setCompetenciaAnoFilter('ALL');
-                setCompetenciaMesFilter('ALL');
-                setUfFilter('ALL');
-                setMunicipioFilter('');
-                setClasseFilter('ALL');
-                setSubclasseFilter('');
-              }}
-              className="text-xs text-red-600 hover:text-red-800 font-semibold cursor-pointer underline"
+              onClick={handleClearAllFilters}
+              className="text-xs text-red-600 hover:text-red-800 font-semibold cursor-pointer underline ml-2 shrink-0"
             >
-              Limpar filtros
+              Limpar todos
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Tabela Corporativa de Processos */}
@@ -789,257 +1033,124 @@ export const ProcessesPage: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table id="processes-table" className="w-full table-fixed 2xl:table-auto text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-3 xl:px-4 w-[28%] min-w-[210px]">Processo / Demanda</th>
-                  <th className="hidden lg:table-cell py-3 px-3 xl:px-4 w-[15%] min-w-[150px]">Autor</th>
-                  <th className="hidden lg:table-cell py-3 px-3 xl:px-4 w-[16%] min-w-[140px]">Empresa vinculada</th>
-                  <th className="hidden 2xl:table-cell py-3 px-3 xl:px-4 min-w-[120px]">Fase / Tutela</th>
-                  <th className="hidden md:table-cell py-3 px-3 xl:px-4 w-[15%] min-w-[132px]">Próximo Prazo</th>
-                  <th className="hidden 2xl:table-cell py-3 px-3 xl:px-4 min-w-[190px]">Obrigação</th>
-                  <th className="hidden xl:table-cell py-3 px-3 xl:px-4 w-[10%] min-w-[86px]">Criticidade</th>
-                  <th className="hidden xl:table-cell py-3 px-3 xl:px-4 w-[12%] min-w-[110px]">Responsável</th>
-                  <th className="py-3 px-3 xl:px-4 w-[13%] min-w-[116px]">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {processes.map((proc) => {
-                  const proximaObrigacao = proc.proxima_obrigacao;
-                  const deadlineInfo = proximaObrigacao ? getOperationalDeadline(proximaObrigacao.prazo) : null;
-                  const respNome = proximaObrigacao?.responsavel?.display_name || proximaObrigacao?.responsavel?.email;
-                  const autores = proc.autores || [];
-                  const autorPrincipal = autores.find((autor) => autor.principal) || autores[0] || null;
-                  const autoresAdicionais = Math.max(0, autores.length - 1);
+          <>
+            {/* Visualização em Cartões (Mobile e Tablet: < lg) — RF-04 e RF-05 */}
+            <div className="block lg:hidden divide-y divide-slate-100">
+              {processes.map((proc) => {
+                const proximaObrigacao = proc.proxima_obrigacao;
+                const deadlineInfo = proximaObrigacao ? getOperationalDeadline(proximaObrigacao.prazo) : null;
+                const respNome = proximaObrigacao?.responsavel?.display_name || proximaObrigacao?.responsavel?.email;
+                const autores = proc.autores || [];
+                const autorPrincipal = autores.find((autor) => autor.principal) || autores[0] || null;
+                const autoresAdicionais = Math.max(0, autores.length - 1);
+                const rawUf = (proc.uf || '').trim().toUpperCase();
+                const inferredUf = !rawUf ? inferUfFromCnj(proc.numero_processo) : null;
+                const effectiveUf = rawUf || inferredUf;
 
-                  return (
-                    <tr
-                      key={proc.id}
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`Abrir processo ${formatProcessNumber(proc.numero_processo) || 'sem número CNJ'}`}
-                      onClick={() => handleOpenDetails(proc)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          handleOpenDetails(proc);
-                        }
-                      }}
-                      className="hover:bg-slate-50/80 focus:bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-200 transition-colors cursor-pointer group"
-                      title="Clique para visualizar o processo"
-                    >
-                      {/* Coluna 1: Processo / Demanda */}
-                      <td className="py-3.5 px-3 xl:px-4">
-                        <div className="flex items-start gap-2">
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-bold text-slate-900 text-xs">
-                                {formatProcessNumber(proc.numero_processo) || 'Sem número CNJ'}
-                              </span>
-                              <ProcessPriorityBadge priority={proc.prioridade} />
-                              {proc.arquivado && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-slate-200 text-slate-700">
-                                  Arq
-                                </span>
-                              )}
-                              {(() => {
-                                const rawUf = (proc.uf || '').trim().toUpperCase();
-                                const inferredUf = !rawUf ? inferUfFromCnj(proc.numero_processo) : null;
-                                const effectiveUf = rawUf || inferredUf;
-                                if (!effectiveUf) return null;
-                                return (
-                                  <span
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                      inferredUf
-                                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                        : 'bg-slate-100 text-slate-700'
-                                    }`}
-                                    title={
-                                      inferredUf
-                                        ? `UF ${inferredUf} inferida pelo segmento do CNJ`
-                                        : `UF ${rawUf} da jurisdição`
-                                    }
-                                  >
-                                    {inferredUf ? `${inferredUf} (inferida)` : rawUf}
-                                  </span>
-                                );
-                              })()}
-                            </div>
-
-                            <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
-                              {proc.tipo_demanda && (
-                                <span className="font-medium text-slate-700">
-                                  {proc.tipo_demanda}
-                                </span>
-                              )}
-                              {proc.protocolo_externo && (
-                                <span className="text-slate-400 font-mono">
-                                  • Prot: {proc.protocolo_externo}
-                                </span>
-                              )}
-                            </div>
-
-                            {proc.cadastro_incompleto && (
-                              <span
-                                id={`process-incompleto-badge-${proc.id}`}
-                                className="inline-flex items-center gap-1 text-[9px] text-amber-800/80 font-normal mt-0.5"
-                                title="Processo com pendências cadastrais"
-                              >
-                                <AlertTriangle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                <span>Cadastro incompleto</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Coluna 2: Autor */}
-                      <td className="hidden lg:table-cell py-3.5 px-3 xl:px-4">
-                        {autorPrincipal ? (
-                          <div className="min-w-0">
-                            <span className="font-semibold text-slate-800 block truncate" title={autorPrincipal.nome}>
-                              {autorPrincipal.nome}
-                            </span>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              {autorPrincipal.documento && (
-                                <span className="font-mono text-[10px] text-slate-400 truncate">
-                                  {autorPrincipal.documento}
-                                </span>
-                              )}
-                              {autoresAdicionais > 0 && (
-                                <span className="text-[10px] font-semibold text-slate-500">
-                                  +{autoresAdicionais} {autoresAdicionais === 1 ? 'autor' : 'autores'}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">Não identificado</span>
-                        )}
-                      </td>
-
-                      {/* Coluna 3: Empresa vinculada e Rés */}
-                      <td className="hidden lg:table-cell py-3.5 px-3 xl:px-4">
-                        {proc.company ? (
-                          <div>
-                            <span className="font-semibold text-slate-800 block">
-                              {proc.company.nome}
-                            </span>
-                            {proc.company.cnpj && (
-                              <span className="font-mono text-[11px] text-slate-400">
-                                {proc.company.cnpj}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 font-medium">
-                              <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
-                              <span>Sem empresa vinculada</span>
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Sinalização explícita de rés estruturadas (separado do contrato) */}
-                        {proc.defendants && proc.defendants.length > 0 && (
-                          <div className="mt-1 pt-1 border-t border-slate-100 flex flex-wrap items-center gap-1">
-                            <span className="text-[10px] text-slate-400 font-medium">Rés:</span>
-                            {proc.defendants.slice(0, 2).map((d) => {
-                              const nome = d.company?.nome || d.nome_livre || 'Ré';
-                              const grp = classifyDefendantGroup(nome);
-                              const isSb = grp === 'SB_SAUDE';
-                              const isSm = grp === 'SAN_MIGUEL';
-                              return (
-                                <span
-                                  key={d.id}
-                                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border ${
-                                    isSb
-                                      ? 'bg-red-50 text-red-700 border-red-200'
-                                      : isSm
-                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                      : 'bg-slate-50 text-slate-700 border-slate-200'
-                                  }`}
-                                  title={`Ré estruturada: ${nome}`}
-                                >
-                                  {nome}
-                                </span>
-                              );
-                            })}
-                            {proc.defendants.length > 2 && (
-                              <span className="text-[9px] font-bold text-slate-500">
-                                +{proc.defendants.length - 2}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Coluna 4: Fase / Tutela */}
-                      <td className="hidden 2xl:table-cell py-3.5 px-3 xl:px-4">
-                        <div>
-                          <span className="font-medium text-slate-800 block text-[11px]">
-                            {proc.fase_processual || '-'}
+                return (
+                  <div
+                    key={proc.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Abrir processo ${formatProcessNumber(proc.numero_processo) || 'sem número CNJ'}`}
+                    onClick={() => handleOpenDetails(proc)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handleOpenDetails(proc);
+                      }
+                    }}
+                    className="p-3.5 sm:p-4 hover:bg-slate-50/80 focus:bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-200 transition-colors cursor-pointer space-y-2.5"
+                  >
+                    {/* Linha 1: CNJ + Badges de Prioridade, Arquivado, UF + Status */}
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="font-mono font-bold text-slate-900 text-xs sm:text-sm break-all">
+                          {formatProcessNumber(proc.numero_processo) || 'Sem número CNJ'}
+                        </span>
+                        <ProcessPriorityBadge priority={proc.prioridade} />
+                        {proc.arquivado && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-slate-200 text-slate-700">
+                            Arq
                           </span>
-                          <span className="text-[10px] text-slate-500">
-                            {proc.tutela_atual || '-'}
+                        )}
+                        {effectiveUf && (
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              inferredUf
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                            title={
+                              inferredUf
+                                ? `UF ${inferredUf} inferida pelo segmento do CNJ`
+                                : `UF ${rawUf} da jurisdição`
+                            }
+                          >
+                            {inferredUf ? `${inferredUf} (inferida)` : rawUf}
                           </span>
-                        </div>
-                      </td>
+                        )}
+                      </div>
+                      <div className="shrink-0">
+                        <ProcessStatusBadge status={proc.status_atual} size="sm" />
+                      </div>
+                    </div>
 
-                      {/* Coluna 5: Próximo Prazo */}
-                      <td className="hidden md:table-cell py-3.5 px-3 xl:px-4">
+                    {/* Tipo de demanda / Protocolo / Cadastro incompleto */}
+                    {(proc.tipo_demanda || proc.protocolo_externo || proc.cadastro_incompleto) && (
+                      <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-1.5">
+                        {proc.tipo_demanda && (
+                          <span className="font-medium text-slate-700">
+                            {proc.tipo_demanda}
+                          </span>
+                        )}
+                        {proc.protocolo_externo && (
+                          <span className="text-slate-400 font-mono">
+                            • Prot: {proc.protocolo_externo}
+                          </span>
+                        )}
+                        {proc.cadastro_incompleto && (
+                          <span
+                            id={`card-process-incompleto-badge-${proc.id}`}
+                            className="inline-flex items-center gap-1 text-[9px] text-amber-800/80 font-normal"
+                            title="Processo com pendências cadastrais"
+                          >
+                            <AlertTriangle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                            <span>Cadastro incompleto</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Destaque operacional: Próximo Prazo e Criticidade (RF-05) */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs bg-slate-50/80 px-3 py-2 rounded-lg border border-slate-100">
+                      {/* Prazo */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[11px] font-semibold text-slate-500 shrink-0">Prazo:</span>
                         {proximaObrigacao && deadlineInfo ? (
-                          <div className="space-y-1">
-                            {proximaObrigacao.prazo ? (
-                              <div className="flex items-center gap-1 text-slate-900 font-mono text-[11px] font-semibold">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {proximaObrigacao.prazo && (
+                              <span className="font-mono text-slate-900 text-[11px] font-semibold flex items-center gap-1">
                                 <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>{deadlineInfo.formattedDate}</span>
-                              </div>
-                            ) : null}
-                            <div>
-                              <span
-                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wide border ${deadlineInfo.badgeClass}`}
-                              >
-                                {deadlineInfo.situation}
+                                {deadlineInfo.formattedDate}
                               </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 font-medium">-</span>
-                        )}
-                      </td>
-
-                      {/* Coluna 6: Obrigação */}
-                      <td className="hidden 2xl:table-cell py-3.5 px-3 xl:px-4">
-                        {proximaObrigacao ? (
-                          <div className="max-w-[280px]">
-                            <div
-                              className="line-clamp-2 text-slate-800 font-medium text-[11px] leading-snug"
-                              title={proximaObrigacao.descricao}
-                            >
-                              {proximaObrigacao.descricao}
-                            </div>
-                            {proximaObrigacao.evento_gerador && (
-                              <div
-                                className="text-[10px] text-slate-400 truncate mt-0.5"
-                                title={`Evento: ${proximaObrigacao.evento_gerador}`}
-                              >
-                                {proximaObrigacao.evento_gerador}
-                              </div>
                             )}
+                            <span
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wide border font-bold ${deadlineInfo.badgeClass}`}
+                            >
+                              {deadlineInfo.situation}
+                            </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic text-[11px]">
-                            Sem obrigação ativa
-                          </span>
+                          <span className="text-slate-400 font-medium text-[11px]">Sem prazo ativo</span>
                         )}
-                      </td>
+                      </div>
 
-                      {/* Coluna 7: Criticidade */}
-                      <td className="hidden xl:table-cell py-3.5 px-3 xl:px-4">
-                        {proximaObrigacao?.criticidade ? (
-                          (() => {
+                      {/* Criticidade */}
+                      {proximaObrigacao?.criticidade && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-slate-500">Criticidade:</span>
+                          {(() => {
                             const crit = proximaObrigacao.criticidade.toUpperCase();
                             if (crit === 'URGENTE') {
                               return (
@@ -1062,57 +1173,472 @@ export const ProcessesPage: React.FC = () => {
                                 </span>
                               );
                             }
-                            if (crit === 'BAIXA') {
-                              return (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
-                                  BAIXA
-                                </span>
-                              );
-                            }
                             return (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
                                 {proximaObrigacao.criticidade}
                               </span>
                             );
-                          })()
-                        ) : (
-                          <span className="text-slate-400 font-medium">-</span>
-                        )}
-                      </td>
+                          })()}
+                        </div>
+                      )}
+                    </div>
 
-                      {/* Coluna 8: Responsável */}
-                      <td className="hidden xl:table-cell py-3.5 px-3 xl:px-4">
+                    {/* Grade de dados secundários: Autor, Empresa/Rés, Responsável (RF-04 & RF-05) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {/* Autor */}
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Autor</span>
+                        {autorPrincipal ? (
+                          <div>
+                            <span className="font-semibold text-slate-800 block truncate" title={autorPrincipal.nome}>
+                              {autorPrincipal.nome}
+                            </span>
+                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                              {autorPrincipal.documento && (
+                                <span className="font-mono">{autorPrincipal.documento}</span>
+                              )}
+                              {autoresAdicionais > 0 && (
+                                <span className="font-semibold text-slate-500">
+                                  +{autoresAdicionais} {autoresAdicionais === 1 ? 'autor' : 'autores'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">Não identificado</span>
+                        )}
+                      </div>
+
+                      {/* Empresa Vinculada */}
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Empresa Vinculada</span>
+                        {proc.company ? (
+                          <div>
+                            <span className="font-semibold text-slate-800 block truncate" title={proc.company.nome}>
+                              {proc.company.nome}
+                            </span>
+                            {proc.company.cnpj && (
+                              <span className="font-mono text-[10px] text-slate-400 block">
+                                {proc.company.cnpj}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 font-medium">
+                            <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
+                            <span>Sem empresa vinculada</span>
+                          </span>
+                        )}
+
+                        {/* Rés estruturadas se houver */}
+                        {proc.defendants && proc.defendants.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-[10px] text-slate-400 font-medium">Rés:</span>
+                            {proc.defendants.slice(0, 2).map((d) => {
+                              const nome = d.company?.nome || d.nome_livre || 'Ré';
+                              const grp = classifyDefendantGroup(nome);
+                              const isSb = grp === 'SB_SAUDE';
+                              const isSm = grp === 'SAN_MIGUEL';
+                              return (
+                                <span
+                                  key={d.id}
+                                  className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold border ${
+                                    isSb
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : isSm
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                                  }`}
+                                >
+                                  {nome}
+                                </span>
+                              );
+                            })}
+                            {proc.defendants.length > 2 && (
+                              <span className="text-[9px] font-bold text-slate-500">
+                                +{proc.defendants.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Responsável */}
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Responsável</span>
                         {proximaObrigacao ? (
                           respNome ? (
-                            <span
-                              className="font-medium text-slate-800 text-[11px] block truncate max-w-[130px]"
-                              title={respNome}
-                            >
+                            <span className="font-medium text-slate-800 text-[11px] block truncate" title={respNome}>
                               {respNome}
                             </span>
                           ) : (
-                            <span className="text-slate-400 italic text-[11px]">
-                              Não atribuído
-                            </span>
+                            <span className="text-slate-400 italic text-[11px]">Não atribuído</span>
                           )
                         ) : (
                           <span className="text-slate-400 font-medium">-</span>
                         )}
-                      </td>
+                      </div>
 
-                      {/* Coluna 9: Status */}
-                      <td className="py-3.5 px-3 xl:px-4">
-                        <ProcessStatusBadge status={proc.status_atual} size="sm" />
-                        <span className="block mt-1 text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity whitespace-nowrap">
-                          Clique para abrir
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      {/* Fase / Tutela (se existir) */}
+                      {(proc.fase_processual || proc.tutela_atual) && (
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Fase / Tutela</span>
+                          <span className="text-slate-800 text-[11px] block truncate">
+                            {[proc.fase_processual, proc.tutela_atual].filter(Boolean).join(' • ')}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Obrigação ativa (se existir) */}
+                      {proximaObrigacao && (
+                        <div className="sm:col-span-2 min-w-0">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Obrigação</span>
+                          <p className="text-slate-800 text-[11px] line-clamp-2 mt-0.5" title={proximaObrigacao.descricao}>
+                            {proximaObrigacao.descricao}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Rodapé: Ação de Abrir evidente */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-slate-400">Toque para ver histórico e prazos</span>
+                      <span className="inline-flex items-center gap-1 text-red-600 font-semibold group-hover:underline">
+                        <span>Abrir processo</span>
+                        <span>→</span>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Visualização em Tabela (Desktop: >= lg) — RF-04 */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table id="processes-table" className="w-full table-fixed text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-3 xl:px-4 w-[32%] xl:w-[26%] 2xl:w-[18%]">Processo / Demanda</th>
+                    <th className="hidden lg:table-cell py-3 px-3 xl:px-4 w-[18%] xl:w-[14%] 2xl:w-[12%]">Autor</th>
+                    <th className="hidden lg:table-cell py-3 px-3 xl:px-4 w-[20%] xl:w-[15%] 2xl:w-[13%]">Empresa vinculada</th>
+                    <th className="hidden 2xl:table-cell py-3 px-3 xl:px-4 2xl:w-[8%]">Fase / Tutela</th>
+                    <th className="hidden lg:table-cell py-3 px-3 xl:px-4 w-[16%] xl:w-[13%] 2xl:w-[11%]">Próximo Prazo</th>
+                    <th className="hidden 2xl:table-cell py-3 px-3 xl:px-4 2xl:w-[12%]">Obrigação</th>
+                    <th className="hidden xl:table-cell py-3 px-3 xl:px-4 xl:w-[9%] 2xl:w-[7%]">Criticidade</th>
+                    <th className="hidden xl:table-cell py-3 px-3 xl:px-4 xl:w-[11%] 2xl:w-[8%]">Responsável</th>
+                    <th className="py-3 px-3 xl:px-4 w-[14%] xl:w-[12%] 2xl:w-[11%] min-w-[120px]">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {processes.map((proc) => {
+                    const proximaObrigacao = proc.proxima_obrigacao;
+                    const deadlineInfo = proximaObrigacao ? getOperationalDeadline(proximaObrigacao.prazo) : null;
+                    const respNome = proximaObrigacao?.responsavel?.display_name || proximaObrigacao?.responsavel?.email;
+                    const autores = proc.autores || [];
+                    const autorPrincipal = autores.find((autor) => autor.principal) || autores[0] || null;
+                    const autoresAdicionais = Math.max(0, autores.length - 1);
+
+                    return (
+                      <tr
+                        key={proc.id}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Abrir processo ${formatProcessNumber(proc.numero_processo) || 'sem número CNJ'}`}
+                        onClick={() => handleOpenDetails(proc)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleOpenDetails(proc);
+                          }
+                        }}
+                        className="hover:bg-slate-50/80 focus:bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-200 transition-colors cursor-pointer group"
+                        title="Clique para visualizar o processo"
+                      >
+                        {/* Coluna 1: Processo / Demanda */}
+                        <td className="py-3.5 px-3 xl:px-4">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-mono font-bold text-slate-900 text-xs break-all">
+                                  {formatProcessNumber(proc.numero_processo) || 'Sem número CNJ'}
+                                </span>
+                                <ProcessPriorityBadge priority={proc.prioridade} />
+                                {proc.arquivado && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-slate-200 text-slate-700">
+                                    Arq
+                                  </span>
+                                )}
+                                {(() => {
+                                  const rawUf = (proc.uf || '').trim().toUpperCase();
+                                  const inferredUf = !rawUf ? inferUfFromCnj(proc.numero_processo) : null;
+                                  const effectiveUf = rawUf || inferredUf;
+                                  if (!effectiveUf) return null;
+                                  return (
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                        inferredUf
+                                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                          : 'bg-slate-100 text-slate-700'
+                                      }`}
+                                      title={
+                                        inferredUf
+                                          ? `UF ${inferredUf} inferida pelo segmento do CNJ`
+                                          : `UF ${rawUf} da jurisdição`
+                                      }
+                                    >
+                                      {inferredUf ? `${inferredUf} (inferida)` : rawUf}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+
+                              <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                                {proc.tipo_demanda && (
+                                  <span className="font-medium text-slate-700">
+                                    {proc.tipo_demanda}
+                                  </span>
+                                )}
+                                {proc.protocolo_externo && (
+                                  <span className="text-slate-400 font-mono">
+                                    • Prot: {proc.protocolo_externo}
+                                  </span>
+                                )}
+                              </div>
+
+                              {proc.cadastro_incompleto && (
+                                <span
+                                  id={`process-incompleto-badge-${proc.id}`}
+                                  className="inline-flex items-center gap-1 text-[9px] text-amber-800/80 font-normal mt-0.5"
+                                  title="Processo com pendências cadastrais"
+                                >
+                                  <AlertTriangle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                  <span>Cadastro incompleto</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Coluna 2: Autor */}
+                        <td className="hidden lg:table-cell py-3.5 px-3 xl:px-4">
+                          {autorPrincipal ? (
+                            <div className="min-w-0">
+                              <span className="font-semibold text-slate-800 block truncate" title={autorPrincipal.nome}>
+                                {autorPrincipal.nome}
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {autorPrincipal.documento && (
+                                  <span className="font-mono text-[10px] text-slate-400 truncate">
+                                    {autorPrincipal.documento}
+                                  </span>
+                                )}
+                                {autoresAdicionais > 0 && (
+                                  <span className="text-[10px] font-semibold text-slate-500">
+                                    +{autoresAdicionais} {autoresAdicionais === 1 ? 'autor' : 'autores'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">Não identificado</span>
+                          )}
+                        </td>
+
+                        {/* Coluna 3: Empresa vinculada e Rés */}
+                        <td className="hidden lg:table-cell py-3.5 px-3 xl:px-4">
+                          {proc.company ? (
+                            <div>
+                              <span className="font-semibold text-slate-800 block truncate" title={proc.company.nome}>
+                                {proc.company.nome}
+                              </span>
+                              {proc.company.cnpj && (
+                                <span className="font-mono text-[11px] text-slate-400 block">
+                                  {proc.company.cnpj}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 font-medium">
+                                <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
+                                <span>Sem empresa vinculada</span>
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Sinalização explícita de rés estruturadas */}
+                          {proc.defendants && proc.defendants.length > 0 && (
+                            <div className="mt-1 pt-1 border-t border-slate-100 flex flex-wrap items-center gap-1">
+                              <span className="text-[10px] text-slate-400 font-medium">Rés:</span>
+                              {proc.defendants.slice(0, 2).map((d) => {
+                                const nome = d.company?.nome || d.nome_livre || 'Ré';
+                                const grp = classifyDefendantGroup(nome);
+                                const isSb = grp === 'SB_SAUDE';
+                                const isSm = grp === 'SAN_MIGUEL';
+                                return (
+                                  <span
+                                    key={d.id}
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                      isSb
+                                        ? 'bg-red-50 text-red-700 border-red-200'
+                                        : isSm
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                                    }`}
+                                    title={`Ré estruturada: ${nome}`}
+                                  >
+                                    {nome}
+                                  </span>
+                                );
+                              })}
+                              {proc.defendants.length > 2 && (
+                                <span className="text-[9px] font-bold text-slate-500">
+                                  +{proc.defendants.length - 2}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Coluna 4: Fase / Tutela */}
+                        <td className="hidden 2xl:table-cell py-3.5 px-3 xl:px-4">
+                          <div>
+                            <span className="font-medium text-slate-800 block text-[11px] truncate">
+                              {proc.fase_processual || '-'}
+                            </span>
+                            <span className="text-[10px] text-slate-500 truncate block">
+                              {proc.tutela_atual || '-'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Coluna 5: Próximo Prazo */}
+                        <td className="hidden lg:table-cell py-3.5 px-3 xl:px-4">
+                          {proximaObrigacao && deadlineInfo ? (
+                            <div className="space-y-1">
+                              {proximaObrigacao.prazo ? (
+                                <div className="flex items-center gap-1 text-slate-900 font-mono text-[11px] font-semibold">
+                                  <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{deadlineInfo.formattedDate}</span>
+                                </div>
+                              ) : null}
+                              <div>
+                                <span
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wide border ${deadlineInfo.badgeClass}`}
+                                >
+                                  {deadlineInfo.situation}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 font-medium">-</span>
+                          )}
+                        </td>
+
+                        {/* Coluna 6: Obrigação */}
+                        <td className="hidden 2xl:table-cell py-3.5 px-3 xl:px-4">
+                          {proximaObrigacao ? (
+                            <div className="max-w-[280px]">
+                              <div
+                                className="line-clamp-2 text-slate-800 font-medium text-[11px] leading-snug"
+                                title={proximaObrigacao.descricao}
+                              >
+                                {proximaObrigacao.descricao}
+                              </div>
+                              {proximaObrigacao.evento_gerador && (
+                                <div
+                                  className="text-[10px] text-slate-400 truncate mt-0.5"
+                                  title={`Evento: ${proximaObrigacao.evento_gerador}`}
+                                >
+                                  {proximaObrigacao.evento_gerador}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">
+                              Sem obrigação ativa
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Coluna 7: Criticidade */}
+                        <td className="hidden xl:table-cell py-3.5 px-3 xl:px-4">
+                          {proximaObrigacao?.criticidade ? (
+                            (() => {
+                              const crit = proximaObrigacao.criticidade.toUpperCase();
+                              if (crit === 'URGENTE') {
+                                return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">
+                                    URGENTE
+                                  </span>
+                                );
+                              }
+                              if (crit === 'ALTA') {
+                                return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-red-50 text-red-700 border border-red-200">
+                                    ALTA
+                                  </span>
+                                );
+                              }
+                              if (crit === 'MEDIA' || crit === 'MÉDIA') {
+                                return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">
+                                    MÉDIA
+                                  </span>
+                                );
+                              }
+                              if (crit === 'BAIXA') {
+                                return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                                    BAIXA
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                                  {proximaObrigacao.criticidade}
+                                </span>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-slate-400 font-medium">-</span>
+                          )}
+                        </td>
+
+                        {/* Coluna 8: Responsável */}
+                        <td className="hidden xl:table-cell py-3.5 px-3 xl:px-4">
+                          {proximaObrigacao ? (
+                            respNome ? (
+                              <span
+                                className="font-medium text-slate-800 text-[11px] block truncate max-w-[130px]"
+                                title={respNome}
+                              >
+                                {respNome}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">
+                                Não atribuído
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-slate-400 font-medium">-</span>
+                          )}
+                        </td>
+
+                        {/* Coluna 9: Status */}
+                        <td className="py-3.5 px-3 xl:px-4">
+                          <ProcessStatusBadge status={proc.status_atual} size="sm" />
+                          <span className="block mt-1 text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity whitespace-nowrap">
+                            Clique para abrir
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

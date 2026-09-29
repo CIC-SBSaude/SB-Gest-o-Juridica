@@ -28,7 +28,7 @@ export async function ensureProcessOrigin(params: {
   actorId?: string | null;
   explicitDate?: string | null;
   definidoPor?: 'SISTEMA' | 'IA' | 'USUARIO';
-}): Promise<{ originCreated: boolean; originId?: string | null }> {
+}): Promise<{ originCreated: boolean; originId?: string | null; reason?: string }> {
   const {
     supabase,
     processId,
@@ -41,7 +41,7 @@ export async function ensureProcessOrigin(params: {
 
   const { data: existing, error: findError } = await supabase
     .from('process_origin')
-    .select('id, data_origem, competencia_mes, competencia_ano, tipo_data, confiabilidade')
+    .select('id, data_origem, competencia_mes, competencia_ano, tipo_data, confiabilidade, manual, definido_por')
     .eq('process_id', processId)
     .eq('is_current', true)
     .maybeSingle();
@@ -50,20 +50,40 @@ export async function ensureProcessOrigin(params: {
     console.warn('[processOriginHelper] Erro ao consultar origem existente:', findError.message);
   }
 
-  // Se já existe e não temos data explícita nova para refinar, mantém
-  if (existing?.id && !explicitDate) {
-    return { originCreated: false, originId: existing.id };
+  // 1. Preserva origem manual ou confirmada por usuário humano (Requisitos 3.1 & 4)
+  if (existing?.id && (existing.manual || existing.definido_por === 'USUARIO' || existing.confiabilidade === 'MANUAL')) {
+    return { originCreated: false, originId: existing.id, reason: 'PRESERVED_HUMAN' };
+  }
+
+  // 2. Precedência: data explicitada no e-mail tem maior prioridade que recebimento da caixa.
+  // Se já temos data declarada no e-mail comprovada e a chamada atual não traz nova data explícita, preserva
+  if (existing?.id && existing.tipo_data === 'DATA_DECLARADA_EMAIL' && !explicitDate) {
+    return { originCreated: false, originId: existing.id, reason: 'PRESERVED_EXPLICIT' };
   }
 
   const baseDateStr = explicitDate || receivedAt;
   if (!baseDateStr) {
-    return { originCreated: false, originId: existing?.id || null };
+    return { originCreated: false, originId: existing?.id || null, reason: 'NO_DATE' };
   }
 
   const comp = deriveCompetencia(baseDateStr);
+  if (!comp) {
+    return { originCreated: false, originId: existing?.id || null, reason: 'INVALID_DATE' };
+  }
+
   const dataOrigemIso = baseDateStr.includes('T')
     ? baseDateStr.slice(0, 10)
     : baseDateStr;
+
+  // Idempotência: se a data e competência já são exatamente as mesmas, não recria
+  if (
+    existing?.id &&
+    existing.data_origem === dataOrigemIso &&
+    existing.competencia_mes === comp.mes &&
+    existing.competencia_ano === comp.ano
+  ) {
+    return { originCreated: false, originId: existing.id, reason: 'ALREADY_CURRENT' };
+  }
 
   const tipoData = explicitDate ? 'DATA_DECLARADA_EMAIL' : 'DATA_RECEBIMENTO_CAIXA';
   const confiabilidade = explicitDate ? 'COMPROVADA' : 'INFERIDA';
@@ -71,8 +91,8 @@ export async function ensureProcessOrigin(params: {
   const newOrigin = {
     process_id: processId,
     data_origem: dataOrigemIso,
-    competencia_mes: comp?.mes || null,
-    competencia_ano: comp?.ano || null,
+    competencia_mes: comp.mes,
+    competencia_ano: comp.ano,
     tipo_data: tipoData,
     confiabilidade,
     email_referencia_id: emailId || null,
@@ -90,18 +110,20 @@ export async function ensureProcessOrigin(params: {
 
   if (insertError) {
     console.warn('[processOriginHelper] Erro ao gravar process_origin:', insertError.message);
-    return { originCreated: false, originId: existing?.id || null };
+    return { originCreated: false, originId: existing?.id || null, reason: insertError.message };
   }
 
-  // Se havia registro anterior ativo, encadeia substituição
-  if (existing?.id && inserted?.id) {
+  // Desativa registros correntes anteriores mantendo histórico atômico
+  if (inserted?.id) {
     await supabase
       .from('process_origin')
       .update({
         is_current: false,
         substituido_por: inserted.id,
       })
-      .eq('id', existing.id);
+      .eq('process_id', processId)
+      .eq('is_current', true)
+      .neq('id', inserted.id);
   }
 
   return { originCreated: true, originId: inserted?.id };

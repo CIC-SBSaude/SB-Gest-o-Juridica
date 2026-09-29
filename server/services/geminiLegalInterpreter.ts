@@ -18,7 +18,9 @@ export type AiFieldApplicationDecision =
   | 'AGUARDANDO_REVISAO'
   | 'NAO_IDENTIFICADO'
   | 'IGNORADO_CAMPO_PREENCHIDO'
-  | 'INVALIDO_DETERMINISTICO';
+  | 'INVALIDO_DETERMINISTICO'
+  | 'CRIADO_SUGESTAO_REVISAO'
+  | 'IGNORADO_MANUAL_EXISTENTE';
 
 export interface AiFieldDecisionInfo {
   fieldName: string;
@@ -41,6 +43,7 @@ export interface AiPartyExtracted {
   name: AiExtractedField<string>;
   role: AiExtractedField<string>;
   roleType?: 'AUTOR' | 'REU' | 'BENEFICIARIO' | 'TERCEIRO' | 'OUTRO' | null;
+  document?: AiExtractedField<string>;
 }
 
 export interface AiMoneyFinding {
@@ -108,6 +111,7 @@ export interface AiIdentificationStructured {
   uf: AiExtractedField<string>;
   orgaoJulgador: AiExtractedField<string>;
   municipio: AiExtractedField<string>;
+  dataOrigem?: AiExtractedField<string>;
 }
 
 export interface AiClassificationStructured {
@@ -346,6 +350,10 @@ export function normalizeResult(
     }),
     orgaoJulgador: normalizeField(rawIdent?.orgaoJulgador ?? rawIdent?.court ?? raw?.court, textOrNull),
     municipio: normalizeField(rawIdent?.municipio ?? raw?.municipality, textOrNull),
+    dataOrigem: normalizeField(rawIdent?.dataOrigem ?? rawIdent?.data_origem, (v) => {
+      const s = String(v || '').trim();
+      return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+    }),
   };
 
   // 2. Classificação
@@ -383,6 +391,7 @@ export function normalizeResult(
         roleType: ['AUTOR', 'REU', 'BENEFICIARIO', 'TERCEIRO', 'OUTRO'].includes(String(item?.roleType || '').toUpperCase())
           ? (String(item.roleType).toUpperCase() as any)
           : null,
+        document: normalizeField(item?.document ?? item?.documento ?? item?.cnpj ?? item?.cpf, textOrNull),
       })).filter((p: AiPartyExtracted) => p.name.value && p.name.value.length >= 3)
     : [];
 
@@ -639,7 +648,8 @@ export async function interpretWithGemini(params: {
     `5. OBRIGAÇÃO: Confiança na obrigação de fazer/não fazer (exists) é SEPARADA da existência de prazos normais. Só marque exists: true se houver determinação/obrigação de cumprimento explícita.\n` +
     `6. CNJ: Só informe numeroProcesso se estiver presente nas evidências e válido no padrão CNJ (20 dígitos).\n` +
     `7. DIFICULDADES DO BENEFICIÁRIO (RF10): Se houver relato de dificuldades enfrentadas pelo beneficiário (tentativas de contato telefônico, setores envolvidos, tempo de espera), extraia no objeto "allegation". OBRIGATÓRIO: A narrativa DEVE começar com o prefixo exato "Supostamente, o(a) beneficiário(a)" (ex: "Supostamente, o(a) beneficiário(a) realizou 3 ligações para o SAC aguardando 15 dias sem retorno...").\n` +
-    `8. POLO PASSIVO (RÉS): Identifique e extraia no array 'parties' TODAS as partes requeridas/rés (ex: Saúde Brasil, San Miguel, Hub Health, etc.) com roleType='REU'. Se houver múltiplas rés (co-rés), preserve cada uma individualmente com seu nome e trecho de evidência (ex: "em face de..."). Não confunda rés com autor, advogados ou empresa do contrato.\n\n` +
+    `8. POLO PASSIVO (RÉS): Identifique e extraia no array 'parties' TODAS as partes requeridas/rés (ex: Saúde Brasil, San Miguel, Hub Health, etc.) com roleType='REU'. Se houver documento/CNPJ/CPF no texto, extraia em 'document'. Se houver múltiplas rés (co-rés), preserve cada uma individualmente com seu nome e trecho de evidência (ex: "em face de..."). Não confunda rés com autor, advogados ou empresa do contrato.\n` +
+    `9. DATA DE ORIGEM / COMPETÊNCIA: Se o e-mail ou documento declarar explicitamente a data de distribuição, propositura ou citação da ação, extraia no campo 'identification.dataOrigem' no formato YYYY-MM-DD com evidência. Caso contrário, mantenha value: null.\n\n` +
     `Retorne SOMENTE JSON válido estruturado exatamente no seguinte formato:\n` +
     JSON.stringify({
       isLegal: true,
@@ -651,7 +661,8 @@ export async function interpretWithGemini(params: {
         comarca: { value: 'Comarca', confidence: 0.90, evidence: 'trecho' },
         uf: { value: 'SP', confidence: 0.95, evidence: 'trecho' },
         orgaoJulgador: { value: 'Vara / Tribunal', confidence: 0.85, evidence: 'trecho' },
-        municipio: { value: 'Município', confidence: 0.85, evidence: 'trecho' }
+        municipio: { value: 'Município', confidence: 0.85, evidence: 'trecho' },
+        dataOrigem: { value: '2026-09-29', confidence: 0.90, evidence: 'trecho' }
       },
       classification: {
         tipoDemanda: { value: 'OBRIGACAO_DE_FAZER|RESSARCIMENTO|INDENIZATORIA|OUTRO', confidence: 0.90, evidence: 'trecho' },
@@ -668,7 +679,8 @@ export async function interpretWithGemini(params: {
         {
           name: { value: 'Nome da Parte', confidence: 0.95, evidence: 'trecho' },
           role: { value: 'Autor / Requerente', confidence: 0.90, evidence: 'trecho' },
-          roleType: 'AUTOR'
+          roleType: 'AUTOR',
+          document: { value: '00.000.000/0001-00', confidence: 0.90, evidence: 'trecho' }
         }
       ],
       values: {
