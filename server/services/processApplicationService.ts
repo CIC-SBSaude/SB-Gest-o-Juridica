@@ -4,6 +4,7 @@ import type { InterpretationResult } from './legalInterpretationService';
 import { enqueueManagementRefreshSafe } from './aiManagementRefreshQueueService';
 import { resolveCompanyForProcess } from './companyResolutionService';
 import { classifyPartyRole } from './partyClassificationService';
+import { ensureProcessOrigin } from './processOriginHelper';
 
 type ProcessApplicationAction = 'CREATED' | 'LINKED' | 'UPDATED' | 'DISTRIBUTED' | 'AMBIGUOUS' | 'SKIPPED';
 
@@ -654,6 +655,16 @@ export async function applyInterpretationToProcess(params: {
     interpretation,
     actorId,
   });
+
+  await ensureProcessOrigin({
+    supabase,
+    processId,
+    emailId,
+    receivedAt,
+    actorId,
+    definidoPor: 'SISTEMA',
+  });
+
 
   // Fase 6B.2: shadow queue. Apenas sinaliza o processo para futura
   // atualização gerencial. Nenhuma chamada adicional de IA acontece aqui.

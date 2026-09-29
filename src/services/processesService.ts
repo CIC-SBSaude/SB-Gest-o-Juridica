@@ -12,8 +12,11 @@ import {
 } from '../types/database';
 import { sortProcesses, type ProcessSortOption } from '../utils/processSorting';
 import { formatUserErrorMessage } from '../utils/errorUtils';
+import { inferUfFromCnj } from '../utils/cnj';
+import { classifyDefendantGroup } from '../utils/defendantClassifier';
 
 export interface ProcessFilters {
+
   search?: string;
   status?: ProcessStatus | 'ALL';
   companyId?: string | 'ALL';
@@ -206,35 +209,27 @@ class ProcessesService {
           beneficiaries: beneficiariesMap[proc.id] || [],
         }));
 
-        // RF02 — Filtro por Réu (SB SAÚDE vs SAN MIGUEL vs Outros)
+        // RF02 — Filtro por Réu (SB SAÚDE vs SAN MIGUEL vs Outros vs Não Identificado)
         if (filters?.reu && filters.reu !== 'ALL') {
           const target = filters.reu.toUpperCase();
           result = result.filter((proc) => {
-            const hasMatch = proc.defendants?.some((d) => {
-              const compNome = (d.company?.nome || '').toUpperCase();
-              const livre = (d.nome_livre || '').toUpperCase();
-              if (target === 'SB_SAUDE') {
-                return (
-                  compNome.includes('SB') ||
-                  compNome.includes('SAUDE BRASIL') ||
-                  livre.includes('SB') ||
-                  livre.includes('SAUDE BRASIL')
-                );
-              }
-              if (target === 'SAN_MIGUEL') {
-                return compNome.includes('SAN MIGUEL') || livre.includes('SAN MIGUEL');
-              }
-              return compNome.includes(target) || livre.includes(target);
-            });
-            if (hasMatch) return true;
+            const defendants = proc.defendants || [];
+            if (target === 'NAO_IDENTIFICADO') {
+              return defendants.length === 0;
+            }
 
-            const legacyComp = (proc.company?.nome || '').toUpperCase();
-            if (target === 'SB_SAUDE') {
-              return legacyComp.includes('SB') || legacyComp.includes('SAUDE BRASIL');
+            if (defendants.length > 0) {
+              return defendants.some((d) => {
+                const name = d.company?.nome || d.nome_livre || '';
+                const group = classifyDefendantGroup(name);
+                if (target === 'SB_SAUDE') return group === 'SB_SAUDE';
+                if (target === 'SAN_MIGUEL') return group === 'SAN_MIGUEL';
+                if (target === 'OUTRO' || target === 'OUTROS') return group === 'OUTROS';
+                return false;
+              });
             }
-            if (target === 'SAN_MIGUEL') {
-              return legacyComp.includes('SAN MIGUEL');
-            }
+
+            // Se não há rés estruturadas cadastradas, não associar silenciosamente empresa do contrato
             return false;
           });
         }
@@ -257,16 +252,21 @@ class ProcessesService {
           });
         }
 
-        // RF05/RF06 — Filtro por Região / Domicílio do Beneficiário (UF e Município)
+        // RF05/RF06 — Filtro por UF processual (jurisdição/foro com inferência determinística por CNJ)
         if (filters?.uf && filters.uf !== 'ALL') {
           const targetUf = filters.uf.toUpperCase();
           result = result.filter((proc) => {
-            if ((proc.uf || '').toUpperCase() === targetUf) return true;
-            return (proc as any).beneficiaries?.some(
-              (b: any) => (b.snapshot_uf || '').toUpperCase() === targetUf
-            );
+            const rawUf = (proc.uf || '').trim().toUpperCase();
+            const effectiveUf = rawUf || inferUfFromCnj(proc.numero_processo);
+
+            if (targetUf === 'NAO_INFORMADO') {
+              return !effectiveUf;
+            }
+
+            return effectiveUf === targetUf;
           });
         }
+
 
         if (filters?.municipio && filters.municipio.trim() !== '') {
           const targetMun = filters.municipio.trim().toLowerCase();

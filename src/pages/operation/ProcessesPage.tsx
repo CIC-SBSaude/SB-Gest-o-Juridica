@@ -25,7 +25,8 @@ import { CompanyModal } from '../../components/companies/CompanyModal';
 import { ProcessDetailsModal } from '../../components/processes/ProcessDetailsModal';
 import { ProcessStatusModal } from '../../components/processes/ProcessStatusModal';
 import { ProcessDeleteModal } from '../../components/processes/ProcessDeleteModal';
-import { formatProcessNumber } from '../../utils/cnj';
+import { formatProcessNumber, BRAZILIAN_UFS, inferUfFromCnj } from '../../utils/cnj';
+import { classifyDefendantGroup } from '../../utils/defendantClassifier';
 import { getOperationalDeadline } from '../../utils/date';
 
 export const ProcessesPage: React.FC = () => {
@@ -57,7 +58,8 @@ export const ProcessesPage: React.FC = () => {
   const [sortOption, setSortOption] = useState<ProcessSortOption>('OPERATIONAL_PRIORITY');
 
   // Novos filtros de negócio (Réu, Competência 1º e-mail, Região, Classificação Assistencial)
-  const [reuFilter, setReuFilter] = useState<'ALL' | 'SB_SAUDE' | 'SAN_MIGUEL' | 'OUTRO'>('ALL');
+  const [reuFilter, setReuFilter] = useState<'ALL' | 'SB_SAUDE' | 'SAN_MIGUEL' | 'OUTROS' | 'NAO_IDENTIFICADO'>('ALL');
+
   const [competenciaAnoFilter, setCompetenciaAnoFilter] = useState<number | 'ALL'>('ALL');
   const [competenciaMesFilter, setCompetenciaMesFilter] = useState<number | 'ALL'>('ALL');
   const [ufFilter, setUfFilter] = useState<string | 'ALL'>('ALL');
@@ -525,7 +527,8 @@ export const ProcessesPage: React.FC = () => {
               <option value="ALL">Todos os Réus</option>
               <option value="SB_SAUDE">SB Saúde</option>
               <option value="SAN_MIGUEL">San Miguel</option>
-              <option value="OUTRO">Outros</option>
+              <option value="OUTROS">Outros</option>
+              <option value="NAO_IDENTIFICADO">Não identificado</option>
             </select>
           </div>
 
@@ -568,7 +571,7 @@ export const ProcessesPage: React.FC = () => {
             </select>
           </div>
 
-          {/* RF05/RF06 — Região / Domicílio do Beneficiário */}
+          {/* RF05/RF06 — Região / Foro Processual (27 UFs nacionais + Não informado) */}
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-slate-500">Região:</span>
             <select
@@ -578,18 +581,12 @@ export const ProcessesPage: React.FC = () => {
               className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
             >
               <option value="ALL">UF: Todas</option>
-              <option value="SP">SP</option>
-              <option value="RJ">RJ</option>
-              <option value="MG">MG</option>
-              <option value="BA">BA</option>
-              <option value="DF">DF</option>
-              <option value="PR">PR</option>
-              <option value="RS">RS</option>
-              <option value="GO">GO</option>
-              <option value="PE">PE</option>
-              <option value="ES">ES</option>
-              <option value="SC">SC</option>
-              <option value="CE">CE</option>
+              {BRAZILIAN_UFS.map((uf) => (
+                <option key={uf} value={uf}>
+                  {uf}
+                </option>
+              ))}
+              <option value="NAO_INFORMADO">Não informado</option>
             </select>
             <input
               type="text"
@@ -598,6 +595,7 @@ export const ProcessesPage: React.FC = () => {
               placeholder="Município..."
               className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
             />
+
           </div>
 
           {/* RF08 — Classificação Assistencial (Bruto e Refinado) */}
@@ -845,6 +843,28 @@ export const ProcessesPage: React.FC = () => {
                                   Arq
                                 </span>
                               )}
+                              {(() => {
+                                const rawUf = (proc.uf || '').trim().toUpperCase();
+                                const inferredUf = !rawUf ? inferUfFromCnj(proc.numero_processo) : null;
+                                const effectiveUf = rawUf || inferredUf;
+                                if (!effectiveUf) return null;
+                                return (
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                      inferredUf
+                                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                        : 'bg-slate-100 text-slate-700'
+                                    }`}
+                                    title={
+                                      inferredUf
+                                        ? `UF ${inferredUf} inferida pelo segmento do CNJ`
+                                        : `UF ${rawUf} da jurisdição`
+                                    }
+                                  >
+                                    {inferredUf ? `${inferredUf} (inferida)` : rawUf}
+                                  </span>
+                                );
+                              })()}
                             </div>
 
                             <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
@@ -899,7 +919,7 @@ export const ProcessesPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Coluna 3: Empresa vinculada */}
+                      {/* Coluna 3: Empresa vinculada e Rés */}
                       <td className="hidden lg:table-cell py-3.5 px-3 xl:px-4">
                         {proc.company ? (
                           <div>
@@ -918,21 +938,38 @@ export const ProcessesPage: React.FC = () => {
                               <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
                               <span>Sem empresa vinculada</span>
                             </span>
-                            {canCreate && (
-                              <div>
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleOpenRegisterCompany(proc);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-[10px] font-semibold transition cursor-pointer border border-slate-200"
-                                  title="Cadastrar empresa cliente e vinculá-la a este processo"
+                          </div>
+                        )}
+
+                        {/* Sinalização explícita de rés estruturadas (separado do contrato) */}
+                        {proc.defendants && proc.defendants.length > 0 && (
+                          <div className="mt-1 pt-1 border-t border-slate-100 flex flex-wrap items-center gap-1">
+                            <span className="text-[10px] text-slate-400 font-medium">Rés:</span>
+                            {proc.defendants.slice(0, 2).map((d) => {
+                              const nome = d.company?.nome || d.nome_livre || 'Ré';
+                              const grp = classifyDefendantGroup(nome);
+                              const isSb = grp === 'SB_SAUDE';
+                              const isSm = grp === 'SAN_MIGUEL';
+                              return (
+                                <span
+                                  key={d.id}
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                    isSb
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : isSm
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                                  }`}
+                                  title={`Ré estruturada: ${nome}`}
                                 >
-                                  <Link2 className="w-2.5 h-2.5 text-slate-500" />
-                                  <span>Cadastrar / Vincular</span>
-                                </button>
-                              </div>
+                                  {nome}
+                                </span>
+                              );
+                            })}
+                            {proc.defendants.length > 2 && (
+                              <span className="text-[9px] font-bold text-slate-500">
+                                +{proc.defendants.length - 2}
+                              </span>
                             )}
                           </div>
                         )}

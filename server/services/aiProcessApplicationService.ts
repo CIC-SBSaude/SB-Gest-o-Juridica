@@ -5,6 +5,13 @@ import {
   AiExtractedField,
 } from './geminiLegalInterpreter';
 import { enqueueManagementRefreshSafe } from './aiManagementRefreshQueueService';
+import { ensureProcessOrigin } from './processOriginHelper';
+import {
+  ensureProcessDefendants,
+  extractDefendantsFromText,
+  CandidateDefendant,
+} from './defendantApplicationHelper';
+
 
 function safeDate(value: string | null): string | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
@@ -425,23 +432,115 @@ export async function applyAiInterpretation(params: {
     };
   }
 
+  // Extração e estruturação de Rés (Polo Passivo separado da empresa do contrato)
+  const candidateDefendants: CandidateDefendant[] = [];
+
+  for (const party of ai.partiesStructured || []) {
+    const pName = party?.name?.value;
+    const pRole = String(party?.role?.value || '').toUpperCase();
+    const pRoleType = String(party?.roleType || '').toUpperCase();
+    if (!pName || pName.length < 3) continue;
+
+    const isReu =
+      pRoleType === 'REU' ||
+      /\b(REU|RE|REQUERID|DEMANDAD|POLO\s+PASSIVO)\b/i.test(pRole);
+
+    if (isReu) {
+      candidateDefendants.push({
+        nome: pName,
+        papel: 'REU',
+        evidenciaTexto: party?.name?.evidence || party?.role?.evidence || null,
+        evidenciaFonte: 'EMAIL',
+        confianca: party?.name?.confidence ?? 0.85,
+      });
+    }
+  }
+
+  // Complementa com menções textuais na timeline/resumos gerados pela IA
+  const textSources = [
+    ai.timelineTitle,
+    ai.timelineSummary,
+    ai.actionSummary,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const textExtracted = extractDefendantsFromText(textSources);
+  for (const item of textExtracted) {
+    if (!candidateDefendants.some((c) => c.nome.toLowerCase() === item.nome.toLowerCase())) {
+      candidateDefendants.push(item);
+    }
+  }
+
+  let defendantsCreatedCount = 0;
+  if (candidateDefendants.length > 0) {
+    const defRes = await ensureProcessDefendants({
+      supabase,
+      processId,
+      candidates: candidateDefendants,
+      actorId,
+    });
+    defendantsCreatedCount = defRes.createdCount;
+    decisions['res'] = {
+      fieldName: 'process_defendants',
+      fieldLabel: 'Polo Passivo (Rés)',
+      decision: defendantsCreatedCount > 0 ? 'APLICADO_AUTOMATICAMENTE' : 'IGNORADO_CAMPO_PREENCHIDO',
+      confidence: 0.9,
+      threshold: 0.85,
+      appliedValue: candidateDefendants.map((c) => c.nome).join(', '),
+      evidence: candidateDefendants[0]?.evidenciaTexto || null,
+      reason: `${candidateDefendants.length} ré(s) estruturada(s) identificada(s) e preservada(s).`,
+    };
+  }
+
+  // Competência de Origem (process_origin)
+  const originRes = await ensureProcessOrigin({
+    supabase,
+    processId,
+    emailId,
+    receivedAt,
+    actorId,
+    definidoPor: 'IA',
+  });
+  if (originRes.originCreated) {
+    decisions['competencia_origem'] = {
+      fieldName: 'process_origin',
+      fieldLabel: 'Competência de Origem',
+      decision: 'APLICADO_AUTOMATICAMENTE',
+      confidence: 0.9,
+      threshold: 0.85,
+      appliedValue: receivedAt,
+      reason: 'Competência de origem calculada a partir da comunicação elegível.',
+    };
+  }
+
   // Fase 6B.2: se a IA acrescentou informação relevante, renova o debounce
   // da mesma fila deduplicada por process_id. Continua sem gerar sugestão.
-  if (changes.length > 0 || obligationCreated || obligationUpdated || timelineCreated) {
+  if (
+    changes.length > 0 ||
+    obligationCreated ||
+    obligationUpdated ||
+    timelineCreated ||
+    defendantsCreatedCount > 0 ||
+    originRes.originCreated
+  ) {
     const changedFields = [
       ...changes.map((change) => change.field),
       ...(obligationCreated ? ['obrigacao_criada'] : []),
       ...(obligationUpdated ? ['obrigacao_atualizada'] : []),
       ...(timelineCreated ? ['timeline_ia'] : []),
+      ...(defendantsCreatedCount > 0 ? ['res_estruturadas'] : []),
+      ...(originRes.originCreated ? ['competencia_origem'] : []),
     ];
 
     await enqueueManagementRefreshSafe({
       supabase,
       processId,
       emailId,
-      trigger: obligationCreated || obligationUpdated
-        ? 'AI_OBLIGATION_CREATED'
-        : changes.length > 0
+      trigger:
+        obligationCreated || obligationUpdated
+          ? 'AI_OBLIGATION_CREATED'
+          : changes.length > 0
           ? 'AI_PROCESS_UPDATED'
           : 'AI_RELEVANT_EVENT',
       changedFields,
@@ -457,3 +556,4 @@ export async function applyAiInterpretation(params: {
     changes,
   };
 }
+

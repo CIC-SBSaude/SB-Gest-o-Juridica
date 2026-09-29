@@ -638,7 +638,8 @@ export async function interpretWithGemini(params: {
     `4. PRAZO vs DATA: Confiança na existência do prazo (exists) é SEPARADA da confiança da data limite final calculada (dueDate). Se houver prazo em dias mas sem data final determinável, dueDate deve ser null.\n` +
     `5. OBRIGAÇÃO: Confiança na obrigação de fazer/não fazer (exists) é SEPARADA da existência de prazos normais. Só marque exists: true se houver determinação/obrigação de cumprimento explícita.\n` +
     `6. CNJ: Só informe numeroProcesso se estiver presente nas evidências e válido no padrão CNJ (20 dígitos).\n` +
-    `7. DIFICULDADES DO BENEFICIÁRIO (RF10): Se houver relato de dificuldades enfrentadas pelo beneficiário (tentativas de contato telefônico, setores envolvidos, tempo de espera), extraia no objeto "allegation". OBRIGATÓRIO: A narrativa DEVE começar com o prefixo exato "Supostamente, o(a) beneficiário(a)" (ex: "Supostamente, o(a) beneficiário(a) realizou 3 ligações para o SAC aguardando 15 dias sem retorno...").\n\n` +
+    `7. DIFICULDADES DO BENEFICIÁRIO (RF10): Se houver relato de dificuldades enfrentadas pelo beneficiário (tentativas de contato telefônico, setores envolvidos, tempo de espera), extraia no objeto "allegation". OBRIGATÓRIO: A narrativa DEVE começar com o prefixo exato "Supostamente, o(a) beneficiário(a)" (ex: "Supostamente, o(a) beneficiário(a) realizou 3 ligações para o SAC aguardando 15 dias sem retorno...").\n` +
+    `8. POLO PASSIVO (RÉS): Identifique e extraia no array 'parties' TODAS as partes requeridas/rés (ex: Saúde Brasil, San Miguel, Hub Health, etc.) com roleType='REU'. Se houver múltiplas rés (co-rés), preserve cada uma individualmente com seu nome e trecho de evidência (ex: "em face de..."). Não confunda rés com autor, advogados ou empresa do contrato.\n\n` +
     `Retorne SOMENTE JSON válido estruturado exatamente no seguinte formato:\n` +
     JSON.stringify({
       isLegal: true,

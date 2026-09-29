@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { ProcessDefendant, DefendantPapel } from '../../types/database';
 import { defendantsService, CreateDefendantDTO } from '../../services/defendantsService';
 import { useAuth } from '../../hooks/useAuth';
+import { classifyDefendantGroup, DEFENDANT_GROUP_LABELS } from '../../utils/defendantClassifier';
 
 interface ProcessDefendantsSectionProps {
   processId: string;
@@ -104,15 +105,16 @@ export const ProcessDefendantsSection: React.FC<ProcessDefendantsSectionProps> =
   };
 
   const handleConfirm = async (defendant: ProcessDefendant) => {
-    if (!user || !defendant.evidencia_texto) return;
+    if (!user) return;
     await defendantsService.confirm(
       defendant.id,
-      defendant.evidencia_texto,
+      defendant.evidencia_texto || 'Confirmado manualmente pelo operador jurídico.',
       defendant.evidencia_fonte ?? 'MANUAL',
       user.id,
     );
     await loadDefendants();
   };
+
 
   const handleRemove = async (defendant: ProcessDefendant) => {
     const { error } = await defendantsService.remove(defendant.id);
@@ -336,40 +338,81 @@ const DefendantRow: React.FC<DefendantRowProps> = ({
 }) => {
   const nome = d.company?.nome ?? d.nome_livre ?? 'Ré sem nome';
   const doc = d.company?.cnpj ?? d.documento_livre;
+  const group = classifyDefendantGroup(nome);
+  const groupLabel = DEFENDANT_GROUP_LABELS[group];
+
+  const groupBadgeClass =
+    group === 'SB_SAUDE'
+      ? 'bg-red-50 text-red-700 border-red-200'
+      : group === 'SAN_MIGUEL'
+      ? 'bg-blue-50 text-blue-700 border-blue-200'
+      : 'bg-slate-50 text-slate-700 border-slate-200';
 
   return (
-    <li className="flex items-start justify-between py-1.5 px-2 rounded hover:bg-gray-50">
-      <div className="min-w-0">
-        <span className="text-sm font-medium text-gray-900 truncate block">{nome}</span>
-        {doc && <span className="text-xs text-gray-500">{doc}</span>}
-        <span className="ml-0 inline-block text-xs text-gray-400 mt-0.5">
-          {PAPEL_LABELS[d.papel]}
-        </span>
-      </div>
-      <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-        {d.confirmado ? (
-          <span className="text-xs text-green-600 font-medium">✓ Confirmada</span>
-        ) : (
-          <span className="text-xs text-amber-500">Pendente</span>
-        )}
-        {!readOnly && !d.confirmado && onConfirm && d.evidencia_texto && (
-          <button
-            type="button"
-            onClick={() => onConfirm(d)}
-            className="text-xs text-green-600 hover:text-green-800 underline"
-          >
-            Confirmar
-          </button>
-        )}
-        {!readOnly && !d.confirmado && onRemove && (
-          <button
-            type="button"
-            onClick={() => onRemove(d)}
-            className="text-xs text-red-500 hover:text-red-700 underline"
-          >
-            Remover
-          </button>
-        )}
+    <li className="p-2 rounded border border-gray-100 bg-white hover:bg-gray-50/80 transition-colors">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-gray-900">{nome}</span>
+            <span
+              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${groupBadgeClass}`}
+            >
+              {groupLabel}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+            {doc && <span className="font-mono">{doc}</span>}
+            <span>•</span>
+            <span className="text-gray-600 font-medium">{PAPEL_LABELS[d.papel]}</span>
+          </div>
+
+          {d.evidencia_texto && (
+            <div className="mt-1.5 p-1.5 rounded bg-gray-50 border border-gray-200 text-xs text-gray-700">
+              <span className="font-semibold text-gray-500 text-[11px] block mb-0.5">
+                Evidência {d.evidencia_fonte ? `(${d.evidencia_fonte})` : ''}:
+              </span>
+              <p className="italic text-[11px] leading-relaxed line-clamp-2">
+                "{d.evidencia_texto}"
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          {d.confirmado ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200">
+              ✓ {d.correcao_por ? 'Confirmada (humano)' : 'Confirmada (IA/sistema)'}
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              Pendente de revisão
+            </span>
+          )}
+
+          {!readOnly && (
+            <div className="flex items-center gap-2 mt-1">
+              {!d.confirmado && onConfirm && (
+                <button
+                  type="button"
+                  onClick={() => onConfirm(d)}
+                  className="text-xs text-green-700 hover:text-green-900 font-semibold underline cursor-pointer"
+                >
+                  Confirmar
+                </button>
+              )}
+              {!d.confirmado && onRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(d)}
+                  className="text-xs text-red-600 hover:text-red-800 underline cursor-pointer"
+                >
+                  Remover
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </li>
   );

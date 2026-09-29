@@ -22,6 +22,7 @@ import emailAccountAdminRoutes from './server/routes/emailAccountAdmin';
 import demandBackfillAdminRoutes from './server/routes/demandBackfillAdmin';
 import exceptionRepairRoutes from './server/routes/exceptionRepair';
 import technicalDiagnosticAdminRoutes from './server/routes/technicalDiagnosticAdmin';
+import processSanitizationAdminRoutes from './server/routes/processSanitizationAdmin';
 import { startAutomationScheduler, stopAutomationScheduler } from './server/services/automationSchedulerService';
 import { releaseAllOwnedAutomationLocks } from './server/services/automationLockService';
 import { centralErrorHandler } from './server/middleware/errorHandler';
@@ -47,6 +48,7 @@ async function startServer() {
   app.use('/api/admin/demand-backfill', demandBackfillAdminRoutes);
   app.use('/api/admin/exception-repair', exceptionRepairRoutes);
   app.use('/api/admin/diagnostico', technicalDiagnosticAdminRoutes);
+  app.use('/api/admin/sanitization', processSanitizationAdminRoutes);
   app.use('/api/imap', (req, _res, next) => {
     if (req.path === '/sync' && req.method === 'POST') {
       console.log('[IMAP SYNC] request reached Express', { authorizationHeaderPresent: Boolean(req.headers.authorization) });
