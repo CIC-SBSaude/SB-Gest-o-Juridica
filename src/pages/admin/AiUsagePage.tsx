@@ -19,6 +19,7 @@ const capacityLabel = (status: string) => ({
   LIMITE_DIARIO_LOCAL: 'Limite diário de segurança',
   LIMITE_TEMPORARIO: 'Limite temporário',
   CIRCUITO_ABERTO: 'Circuito aberto',
+  ACESSO_NEGADO: 'Acesso negado pelo provedor',
   INDISPONIVEL: 'Indisponível',
 }[status] || status);
 
@@ -27,6 +28,31 @@ export const AiUsagePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [budget, setBudget] = useState<any>(null);
+  const [checkingAccess, setCheckingAccess] = useState<string | null>(null);
+  const [accessMessage, setAccessMessage] = useState<string | null>(null);
+
+  const checkAccess = async (model: string) => {
+    if (checkingAccess) return;
+    setCheckingAccess(model);
+    setAccessMessage(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sessão expirada. Entre novamente.');
+      const response = await fetch('/api/ai/access-check', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Falha na verificação de acesso.');
+      setAccessMessage(`Acesso confirmado para ${model}.`);
+    } catch (err: any) {
+      setAccessMessage(err.message || 'Falha na verificação de acesso.');
+    } finally {
+      await fetchUsageData(true);
+      setCheckingAccess(null);
+    }
+  };
 
   const fetchUsageData = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -203,6 +229,7 @@ export const AiUsagePage: React.FC = () => {
           )}
         </div>
 
+        {accessMessage && <p role="status" className="mb-3 text-sm text-slate-700">{accessMessage}</p>}
         {Array.isArray(budget?.routerModelStates) && budget.routerModelStates.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {budget.routerModelStates.map((state: any) => (
@@ -217,6 +244,15 @@ export const AiUsagePage: React.FC = () => {
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-500">{state.reason}</span>
                 </div>
 
+                {state.capacityStatus === 'ACESSO_NEGADO' && <div className="mt-3 text-xs text-rose-800">
+                  <p>Regularize o acesso ao projeto no Google. O reset de quota não remove este bloqueio.</p>
+                  <p>A verificação envia apenas uma mensagem de teste e consome uma chamada. Requer perfil ADMIN.</p>
+                  <button type="button" disabled={checkingAccess !== null}
+                    onClick={() => checkAccess(state.model)}
+                    className="mt-2 rounded border border-rose-300 px-3 py-2 font-semibold disabled:opacity-50">
+                    {checkingAccess === state.model ? 'Verificando acesso...' : 'Verificar acesso após regularização'}
+                  </button>
+                </div>}
                 <div className="grid grid-cols-2 gap-2 mt-3 text-[11px]">
                   <div className="bg-white rounded border border-slate-200 p-2">
                     <div className="text-slate-400">Chamadas locais no dia</div>

@@ -31,6 +31,7 @@ export interface LockAuditItem {
 }
 
 export type AiCapacityStatus =
+  | 'ACESSO_NEGADO'
   | 'DISPONIVEL'
   | 'QUOTA_PROVEDOR_ESGOTADA'
   | 'LIMITE_DIARIO_LOCAL'

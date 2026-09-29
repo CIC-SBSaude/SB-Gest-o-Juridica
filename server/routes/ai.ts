@@ -7,14 +7,33 @@ import { getAiBudgetState } from '../services/aiUsageService';
 import { applyInterpretationToProcess } from '../services/processApplicationService';
 import { applyAiInterpretation } from '../services/aiProcessApplicationService';
 import type { InterpretationResult } from '../services/legalInterpretationService';
-import { requireAuth } from '../middleware/authMiddleware';
+import { requireAuth, type AuthenticatedRequest } from '../middleware/authMiddleware';
 import { ENV } from '../config/env';
 import { generateManagementSuggestions } from '../services/aiManagementSuggestionService';
 import { getAiRuntimeConfig } from '../services/aiRuntimeConfigService';
-import { getAiRouterModelChain } from '../services/aiRouterService';
+import { getAiRouterModelChain, generateContentWithAiRouter, readHealth } from '../services/aiRouterService';
 import { classifyAiCapacity } from '../services/aiCapacityStatusService';
 
 const router = express.Router();
+
+// An explicit, admin-only synthetic request. No email or process data is transmitted.
+router.post('/access-check', requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Apenas ADMIN pode verificar o acesso.' });
+  if (!getAiRouterModelChain().includes(req.body?.model)) {
+    return res.status(400).json({ error: 'Modelo inválido.' });
+  }
+  const supabase = getBackendSupabase();
+  if (!supabase) return res.status(503).json({ error: 'Supabase backend não configurado.' });
+  try {
+    await generateContentWithAiRouter({ supabase, contents: 'Responda apenas OK.',
+      config: { maxOutputTokens: 32 }, estimatedTokens: 64, purpose: 'ADMIN_ACCESS_CHECK',
+      preferredModel: req.body.model, accessProbe: true });
+    return res.json({ ok: true, model: req.body.model });
+  } catch (error: any) {
+    return res.status(502).json({ ok: false, code: error?.code || 'ACCESS_CHECK_FAILED',
+      error: 'A verificação não teve sucesso. O bloqueio de acesso foi preservado; consulte o diagnóstico e a configuração do provedor.' });
+  }
+});
 
 router.get('/health', async (_req, res) => {
   const supabase = getBackendSupabase();
@@ -46,18 +65,15 @@ router.get('/budget', requireAuth, async (req, res) => {
       ...routerModels.map((model) => getAiBudgetState(supabase, { model })),
     ]);
 
-    const { data: healthRows } = await supabase
-      .from('ai_model_health')
-      .select('model,circuit_open_until,last_error_code,last_error_message,last_failure_at,last_success_at')
-      .in('model', routerModels);
-    const healthByModel = new Map((healthRows || []).map((row: any) => [row.model, row]));
+    const healthRows = await Promise.all(routerModels.map(model => readHealth(supabase, model)));
+    const healthByModel = new Map(healthRows.filter(Boolean).map((row: any) => [row.model, row]));
 
     const routerModelStates = routerStates.map((state) => {
       const health: any = healthByModel.get(state.model) || null;
       return {
         model: state.model,
-        allowed: state.allowed,
-        reason: state.reason,
+        allowed: health?.last_error_code === 'AI_ACCESS_DENIED' ? false : state.allowed,
+        reason: health?.last_error_code === 'AI_ACCESS_DENIED' ? 'AI_ACCESS_DENIED' : state.reason,
         capacityStatus: classifyAiCapacity({
           routerEnabled: true,
           allowed: state.allowed,

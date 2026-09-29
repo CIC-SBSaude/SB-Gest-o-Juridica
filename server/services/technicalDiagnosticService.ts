@@ -371,7 +371,7 @@ export async function runTechnicalDiagnostic(): Promise<TechnicalDiagnosticRepor
 
     let severity: DiagnosticStatus = 'OK';
     if (routerEnabled && capacityStatus !== 'DISPONIVEL') {
-      severity = capacityStatus === 'INDISPONIVEL' ? 'CRITICO' : 'ALERTA';
+      severity = ['INDISPONIVEL', 'ACESSO_NEGADO'].includes(capacityStatus) ? 'CRITICO' : 'ALERTA';
     }
 
     let msgPreview = item.last_error_message || null;

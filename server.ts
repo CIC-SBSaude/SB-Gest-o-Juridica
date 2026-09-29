@@ -29,7 +29,7 @@ import { ENV, getSafeConfigReport, validateBackendConfig } from './server/config
 
 async function startServer() {
   const app = express();
-  const PORT = 3002;
+  const PORT = ENV.app.port;
 
   const configIssues = validateBackendConfig();
   console.log('[CONFIG] inventário seguro', getSafeConfigReport());

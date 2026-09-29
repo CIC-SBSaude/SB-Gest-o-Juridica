@@ -146,6 +146,7 @@ export const TechnicalDiagnosticPage: React.FC = () => {
     LIMITE_DIARIO_LOCAL: 'Limite diário de segurança',
     LIMITE_TEMPORARIO: 'Limite temporário',
     CIRCUITO_ABERTO: 'Circuito aberto',
+    ACESSO_NEGADO: 'Acesso negado pelo provedor',
     INDISPONIVEL: 'Indisponível',
     FORA_DO_ROTEADOR: 'Fora do roteador',
   }[status] || status);

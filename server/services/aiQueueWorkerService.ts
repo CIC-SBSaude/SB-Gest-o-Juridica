@@ -3,6 +3,7 @@ import { getAiRouterCapacityState } from './aiRouterService';
 import { processEmailWithAi } from './emailAiProcessingService';
 import { withAutomationLock } from './automationLockService';
 import { isTransientSupabaseError } from './supabaseResilienceService';
+import { isAiAccessDenied } from './aiAccessError';
 
 export async function runAiQueueWorker() {
   return withAutomationLock('AI_QUEUE_WORKER', 600, async () => {
@@ -12,11 +13,13 @@ export async function runAiQueueWorker() {
     let processed = 0;
     let errors = 0;
     let pausedByQuota = false;
+    let pausedByAccess = false;
 
     while (true) {
       const capacity = await getAiRouterCapacityState(supabase);
       if (!capacity.available) {
-        pausedByQuota = true;
+        pausedByAccess = capacity.states.some(state => state.reason === 'AI_ACCESS_DENIED');
+        pausedByQuota = !pausedByAccess;
         console.warn('[AI WORKER] router sem capacidade disponível; fila preservada', { states: capacity.states });
         break;
       }
@@ -61,6 +64,13 @@ export async function runAiQueueWorker() {
         processed += 1;
       } catch (err: any) {
         errors += 1;
+        if (isAiAccessDenied(err)) {
+          pausedByAccess = true;
+          console.error('[AI WORKER] acesso ao provedor negado; fila preservada até verificação administrativa', {
+            emailId: next.id, code: err.code, status: err.status,
+          });
+          break;
+        }
         if (isTransientSupabaseError(err)) {
           console.warn('[AI WORKER] erro temporário de banco/rede no item; interrompendo ciclo atual', {
             emailId: next.id,
@@ -92,6 +102,6 @@ export async function runAiQueueWorker() {
       }
     }
 
-    return { processed, errors, pausedByQuota };
+    return { processed, errors, pausedByQuota, pausedByAccess };
   });
 }

@@ -93,7 +93,11 @@ export async function processEmailWithAi(params: {
     return { ok: false, paused: true, status: 'PENDENTE_IA', ai_state: 'PAUSED_429', error: aiOutcome.error };
   }
   if (aiOutcome.state !== 'SUCCESS' || !aiOutcome.result) {
-    throw Object.assign(new Error(aiOutcome.error || 'Falha ao interpretar com Gemini.'), { status: 502, aiState: aiOutcome.state });
+    throw Object.assign(new Error(aiOutcome.error || 'Falha ao interpretar com Gemini.'), {
+      status: aiOutcome.errorStatus || 502,
+      code: aiOutcome.errorCode,
+      aiState: aiOutcome.state,
+    });
   }
 
   const ai = aiOutcome.result;

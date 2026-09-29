@@ -184,6 +184,8 @@ export interface GeminiInterpretationOutcome {
   model: string | null;
   result: AiLegalInterpretation | null;
   error: string | null;
+  errorStatus?: number;
+  errorCode?: string;
   budget?: { callsToday: number; configuredBudget: number; effectiveLimit: number };
 }
 
@@ -779,6 +781,8 @@ export async function interpretWithGemini(params: {
       status: status || undefined,
       code: rawCode,
     });
-    return { state: 'FAILED', model, result: null, error: message };
+    return { state: 'FAILED', model, result: null, error: message,
+      errorStatus: status || undefined,
+      errorCode: typeof rawCode === 'string' ? rawCode : undefined };
   }
 }

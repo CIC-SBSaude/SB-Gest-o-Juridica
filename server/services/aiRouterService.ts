@@ -2,6 +2,7 @@ import { aiAttemptGate, AiAdmissionError } from './aiAttemptGate';
 import { GoogleGenAI } from '@google/genai';
 import { ENV } from '../config/env';
 import { getAiBudgetState, markAiQuotaExhausted, recordAiUsage } from './aiUsageService';
+import { AI_ACCESS_DENIED, aiAccessError, isAiAccessDenied, providerHttpStatus } from './aiAccessError';
 
 export const AI_MODEL_CHAIN = [
   'gemini-3.5-flash-lite',
@@ -10,6 +11,8 @@ export const AI_MODEL_CHAIN = [
 
 const CIRCUIT_MINUTES = 10;
 const RETRY_503_DELAYS_MS = [3000, 8000];
+// Keep the provider blocked in this process even if persisting health fails.
+const accessBlocks = new Map<string, any>();
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -21,7 +24,7 @@ export type AiRouterResult = {
 };
 
 function errorStatus(error: any) {
-  return Number(error?.status || error?.response?.status || (typeof error?.code === 'number' ? error.code : 0));
+  return providerHttpStatus(error);
 }
 
 function errorMessage(error: any) {
@@ -200,24 +203,25 @@ function isFatalRequestError(error: any) {
   return [400, 401, 403].includes(status);
 }
 
-async function readHealth(supabase: any, model: string) {
+export async function readHealth(supabase: any, model: string) {
   try {
     const { data, error } = await supabase
       .from('ai_model_health')
       .select('model,circuit_open_until,last_error_code,last_error_message,last_failure_at,last_success_at')
       .eq('model', model)
       .maybeSingle();
-    if (error) return null;
-    return data || null;
+    if (error) return accessBlocks.get(model) || null;
+    return accessBlocks.get(model) || data || null;
   } catch {
-    return null;
+    return accessBlocks.get(model) || null;
   }
 }
 
 async function markModelSuccess(supabase: any, model: string) {
+  const recoveringAccess = (await readHealth(supabase, model))?.last_error_code === AI_ACCESS_DENIED;
   try {
     const now = new Date().toISOString();
-    await supabase.from('ai_model_health').upsert({
+    const { error } = await supabase.from('ai_model_health').upsert({
       model,
       circuit_open_until: null,
       last_error_code: null,
@@ -225,24 +229,34 @@ async function markModelSuccess(supabase: any, model: string) {
       last_success_at: now,
       updated_at: now,
     }, { onConflict: 'model' });
-  } catch {
+    if (error) throw error;
+    accessBlocks.delete(model);
+  } catch (error) {
+    if (recoveringAccess) throw Object.assign(new Error('A chamada funcionou, mas não foi possível persistir a recuperação de acesso.'), {
+      code: 'AI_ACCESS_RECOVERY_NOT_SAVED', status: 503,
+    });
     // Persistência de saúde é auxiliar; nunca derruba a chamada bem-sucedida.
   }
 }
 
 async function markModelFailure(supabase: any, model: string, code: string, message: string, openMinutes = CIRCUIT_MINUTES) {
   try {
+    if (code !== AI_ACCESS_DENIED && (await readHealth(supabase, model))?.last_error_code === AI_ACCESS_DENIED) return;
     const now = new Date();
-    const until = new Date(now.getTime() + openMinutes * 60_000).toISOString();
-    await supabase.from('ai_model_health').upsert({
+    const until = code === AI_ACCESS_DENIED ? null : new Date(now.getTime() + openMinutes * 60_000).toISOString();
+    const failure = {
       model,
       circuit_open_until: until,
       last_error_code: code,
       last_error_message: message.slice(0, 12000),
       last_failure_at: now.toISOString(),
       updated_at: now.toISOString(),
-    }, { onConflict: 'model' });
+    };
+    if (code === AI_ACCESS_DENIED) accessBlocks.set(model, failure);
+    const { error } = await supabase.from('ai_model_health').upsert(failure, { onConflict: 'model' });
+    if (error) throw error;
   } catch {
+    console.error('[AI ROUTER] falha ao persistir saúde do modelo', { model, code });
     // Best effort. O router continua funcionando mesmo antes da migration da tabela de saúde.
   }
 }
@@ -265,6 +279,8 @@ export async function generateContentWithAiRouter(params: {
   purpose?: string;
   preferredModel?: string | null;
   timeoutMs?: number;
+  // Only the authenticated administrator's synthetic access check may bypass this block.
+  accessProbe?: boolean;
 }): Promise<AiRouterResult> {
   if (!ENV.gemini.apiKey) {
     throw Object.assign(new Error('GEMINI_API_KEY não configurada.'), { status: 503, code: 'AI_NO_KEY' });
@@ -273,11 +289,20 @@ export async function generateContentWithAiRouter(params: {
   const timeoutMs = Math.max(1000, Number(params.timeoutMs || ENV.gemini.timeoutMs));
   const ai = new GoogleGenAI({ apiKey: ENV.gemini.apiKey, httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } } });
   const triedModels: AiRouterResult['triedModels'] = [];
+  let accessBlocked = false;
   let callsMade = 0;
   let lastError: any = null;
 
-  for (const model of orderedModels(params.preferredModel)) {
+  if (params.accessProbe && !AI_MODEL_CHAIN.includes(params.preferredModel as any)) {
+    throw Object.assign(new Error('Modelo inválido para verificação de acesso.'), { status: 400 });
+  }
+  for (const model of params.accessProbe ? [params.preferredModel!] : orderedModels(params.preferredModel)) {
     const health = await readHealth(params.supabase, model);
+    if (health?.last_error_code === AI_ACCESS_DENIED && !params.accessProbe) {
+      accessBlocked = true;
+      triedModels.push({ model, outcome: AI_ACCESS_DENIED });
+      continue;
+    }
     const openUntil = health?.circuit_open_until ? new Date(health.circuit_open_until).getTime() : 0;
     if (openUntil > Date.now()) {
       triedModels.push({ model, outcome: `CIRCUIT_OPEN_UNTIL_${health.circuit_open_until}` });
@@ -324,6 +349,9 @@ export async function generateContentWithAiRouter(params: {
             model, estimatedTokensForNextRequest: Math.max(0, Number(params.estimatedTokens || 0)),
           });
           const latestHealth = await readHealth(params.supabase, model);
+          if (latestHealth?.last_error_code === AI_ACCESS_DENIED && !params.accessProbe) {
+            throw aiAccessError('Acesso ao Gemini bloqueado. Regularize o projeto e execute a verificação administrativa.');
+          }
           if (Date.parse(latestHealth?.circuit_open_until || '') > Date.now()) {
             return { ...current, allowed: false, reason: 'CIRCUIT_OPEN' };
           }
@@ -380,6 +408,7 @@ export async function generateContentWithAiRouter(params: {
 
         return { response, model, callsMade, triedModels };
       } catch (error: any) {
+        if (error?.code === 'AI_ACCESS_RECOVERY_NOT_SAVED') throw error;
         if (error instanceof AiAdmissionError) {
           triedModels.push({ model, outcome: `BUDGET_${error.reason}` });
           break;
@@ -387,6 +416,18 @@ export async function generateContentWithAiRouter(params: {
         lastError = error;
         const status = errorStatus(error);
         const message = errorMessage(error);
+
+        if (isAiAccessDenied(error)) {
+          // The explicit project denial affects every model sharing this API key.
+          const affected = /your project has been denied access/i.test(message) || status === 401
+            ? [...AI_MODEL_CHAIN] : [model];
+          for (const affectedModel of affected) {
+            await markModelFailure(params.supabase, affectedModel, AI_ACCESS_DENIED,
+              JSON.stringify(providerErrorSummary(error)));
+          }
+          console.error('[AI ROUTER] acesso negado; sem retry ou fallback', { model, status, affected });
+          throw aiAccessError(message, status || 403);
+        }
 
         if (isFatalRequestError(error)) {
           triedModels.push({ model, outcome: `FATAL_${status || 'REQUEST'}` });
@@ -491,6 +532,7 @@ export async function generateContentWithAiRouter(params: {
     }
   }
 
+  if (accessBlocked) throw aiAccessError('Acesso ao Gemini bloqueado. Regularize o projeto e execute a verificação administrativa.');
   const error: any = new Error('AI_ROUTER_EXHAUSTED: nenhum dos modelos configurados conseguiu atender a chamada.');
   error.code = 'AI_ROUTER_EXHAUSTED';
   error.status = 503;
@@ -504,6 +546,10 @@ export async function getAiRouterCapacityState(supabase: any) {
   if (!ENV.gemini.apiKey) return { available: false, model: null, states: AI_MODEL_CHAIN.map(model => ({ model, available: false, reason: 'AI_NO_KEY' })) };
   for (const model of AI_MODEL_CHAIN) {
     const health = await readHealth(supabase, model);
+    if (health?.last_error_code === AI_ACCESS_DENIED) {
+      states.push({ model, available: false, reason: AI_ACCESS_DENIED });
+      continue;
+    }
     const openUntil = health?.circuit_open_until ? new Date(health.circuit_open_until).getTime() : 0;
     if (openUntil > Date.now()) {
       states.push({ model, available: false, reason: 'CIRCUIT_OPEN' });

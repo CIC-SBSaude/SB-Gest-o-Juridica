@@ -1,4 +1,5 @@
 export type AiCapacityStatus =
+  | 'ACESSO_NEGADO'
   | 'DISPONIVEL'
   | 'QUOTA_PROVEDOR_ESGOTADA'
   | 'LIMITE_DIARIO_LOCAL'
@@ -23,6 +24,9 @@ export function classifyAiCapacity(input: AiCapacityInput): AiCapacityStatus {
   const lastError = String(input.lastErrorCode || '').toUpperCase();
   const nowMs = Number.isFinite(input.nowMs) ? Number(input.nowMs) : Date.now();
   const circuitOpen = Boolean(input.circuitOpenUntil && Date.parse(input.circuitOpenUntil) > nowMs);
+
+  // Permission failures do not expire with a quota reset or a short circuit.
+  if (lastError === 'AI_ACCESS_DENIED' || reason === 'AI_ACCESS_DENIED') return 'ACESSO_NEGADO';
 
   // O orçamento diário tem precedência sobre o circuit breaker curto. Um circuito pode
   // expirar após 15 minutos, mas a quota diária continua indisponível até o reset do provedor.

@@ -16,6 +16,8 @@ export function isTransientSupabaseError(error: any): boolean {
     error || ''
   );
 
+  // Explicit authorization failures must never be promoted by textual heuristics.
+  if ([400, 401, 403].includes(status) || code === 'AI_ACCESS_DENIED') return false;
   if ([408, 425, 429, 500, 502, 503, 504].includes(status)) return true;
   if ([
     'ETIMEDOUT',
