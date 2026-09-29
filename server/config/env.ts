@@ -95,6 +95,12 @@ export const ENV = Object.freeze({
     maxImagesPerEmail: 8,
     attachmentMaxTextChars: 120_000,
   }),
+
+  assistencial: Object.freeze({
+    url: rawEnv('GESTAO_ASSISTENCIAL_URL') || 'http://192.168.91.103:55321',
+    anonKey: rawEnv('GESTAO_ASSISTENCIAL_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0',
+    timeoutMs: 4_000,
+  }),
 });
 
 export type BackendConfigIssue = {

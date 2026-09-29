@@ -11,6 +11,7 @@ import {
   CreatePersonDTO,
   CreateEnrollmentDTO,
   LinkBeneficiaryDTO,
+  UnifiedBeneficiarySearchResult,
 } from '../../services/beneficiariesService';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -49,6 +50,19 @@ const formatDate = (dateStr: string | null | undefined): string => {
   return `${day}/${month}/${year}`;
 };
 
+const calculateAge = (dob: string | null | undefined): string => {
+  if (!dob) return '';
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return '';
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age >= 0 ? String(age) : '';
+};
+
 export const ProcessBeneficiariesSection: React.FC<ProcessBeneficiariesSectionProps> = ({
   processId,
   readOnly = false,
@@ -60,7 +74,9 @@ export const ProcessBeneficiariesSection: React.FC<ProcessBeneficiariesSectionPr
   // Form search and creation
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<BeneficiaryPerson[]>([]);
+  const [searchResults, setSearchResults] = useState<UnifiedBeneficiarySearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<BeneficiaryPerson | null>(null);
   const [enrollments, setEnrollments] = useState<BeneficiaryEnrollment[]>([]);
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<string>('');
@@ -108,8 +124,10 @@ export const ProcessBeneficiariesSection: React.FC<ProcessBeneficiariesSectionPr
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-    const { data } = await beneficiariesService.searchPersons(searchQuery);
+    setSearching(true);
+    const { data } = await beneficiariesService.searchUnified(searchQuery);
     setSearchResults(data);
+    setSearching(false);
   };
 
   const handleSelectPerson = async (person: BeneficiaryPerson) => {
@@ -118,11 +136,49 @@ export const ProcessBeneficiariesSection: React.FC<ProcessBeneficiariesSectionPr
       ...f,
       snapshot_municipio: person.municipio || '',
       snapshot_uf: person.uf || '',
+      snapshot_idade: calculateAge(person.data_nascimento),
     }));
     const { data } = await beneficiariesService.getEnrollmentsByPerson(person.id);
     setEnrollments(data);
     if (data.length > 0) {
       setSelectedEnrollmentId(data[0].id);
+    }
+  };
+
+  const handleSelectUnified = async (item: UnifiedBeneficiarySearchResult) => {
+    if (item.origem === 'LOCAL' && item.rawLocal) {
+      await handleSelectPerson(item.rawLocal);
+      return;
+    }
+
+    if (item.origem === 'ASSISTENCIAL' && item.rawAssistencial) {
+      setImporting(true);
+      const { person, enrollment, error } = await beneficiariesService.importFromAssistencial(
+        item.rawAssistencial,
+        user?.id
+      );
+      setImporting(false);
+
+      if (error || !person) {
+        alert(error || 'Não foi possível importar dados do beneficiário.');
+        return;
+      }
+
+      setSelectedPerson(person);
+      setLinkForm(f => ({
+        ...f,
+        snapshot_municipio: person.municipio || '',
+        snapshot_uf: person.uf || '',
+        snapshot_idade: calculateAge(person.data_nascimento),
+      }));
+
+      const { data } = await beneficiariesService.getEnrollmentsByPerson(person.id);
+      setEnrollments(data);
+      if (enrollment) {
+        setSelectedEnrollmentId(enrollment.id);
+      } else if (data.length > 0) {
+        setSelectedEnrollmentId(data[0].id);
+      }
     }
   };
 
@@ -290,25 +346,72 @@ export const ProcessBeneficiariesSection: React.FC<ProcessBeneficiariesSectionPr
                   </button>
                 </div>
 
-                {searchResults.length > 0 && (
-                  <div className="divide-y divide-gray-200 border border-gray-200 rounded bg-white max-h-40 overflow-y-auto">
-                    {searchResults.map(p => (
-                      <div
-                        key={p.id}
-                        onClick={() => handleSelectPerson(p)}
-                        className={`p-2 cursor-pointer hover:bg-blue-50 flex items-center justify-between ${
-                          selectedPerson?.id === p.id ? 'bg-blue-50 font-bold' : ''
-                        }`}
-                      >
-                        <div>
-                          <span className="text-gray-900">{p.nome_completo}</span>
-                          <span className="text-gray-400 ml-2 font-mono text-[11px]">{formatCPF(p.cpf)}</span>
+                {searching && (
+                  <div className="text-gray-500 text-xs italic py-2 flex items-center justify-center gap-2 bg-white border border-gray-200 rounded">
+                    <span className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
+                    <span>Buscando no Jurídico e no Gestão Assistencial...</span>
+                  </div>
+                )}
+
+                {importing && (
+                  <div className="text-emerald-700 text-xs italic py-2 flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 rounded">
+                    <span className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span>
+                    <span>Importando dados cadastrais do Gestão Assistencial...</span>
+                  </div>
+                )}
+
+                {!searching && searchResults.length > 0 && (
+                  <div className="divide-y divide-gray-200 border border-gray-200 rounded bg-white max-h-56 overflow-y-auto shadow-xs">
+                    {searchResults.map(p => {
+                      const isSelected = selectedPerson?.id === (p.person_id || p.id);
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => handleSelectUnified(p)}
+                          className={`p-2.5 cursor-pointer hover:bg-blue-50/70 flex items-center justify-between transition-colors ${
+                            isSelected ? 'bg-blue-50 font-medium ring-1 ring-inset ring-blue-500' : ''
+                          }`}
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-900 font-medium">{p.nome_completo}</span>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider ${
+                                  p.origem === 'ASSISTENCIAL'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                }`}
+                              >
+                                {p.origem === 'ASSISTENCIAL' ? 'Gestão Assistencial' : 'Jurídico'}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 text-[11px] text-gray-500 font-mono">
+                              <span>CPF: {formatCPF(p.cpf)}</span>
+                              {p.carteirinha && (
+                                <span className="text-blue-700 bg-blue-50 px-1 rounded font-sans font-medium">
+                                  Cart: {p.carteirinha}
+                                </span>
+                              )}
+                              {p.empresa && (
+                                <span className="text-slate-600 font-sans truncate max-w-[240px]" title={p.empresa}>
+                                  {p.empresa}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right text-[11px] text-gray-500 shrink-0 ml-2">
+                            <div>{p.municipio ? `${p.municipio}/${p.uf || ''}` : 'Sem cidade'}</div>
+                            {p.data_nascimento && <div>Nasc: {formatDate(p.data_nascimento)}</div>}
+                          </div>
                         </div>
-                        <span className="text-gray-500 text-[11px]">
-                          {p.municipio ? `${p.municipio}/${p.uf}` : 'Sem cidade'}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
+                  </div>
+                )}
+
+                {!searching && searchQuery.trim().length > 0 && searchResults.length === 0 && (
+                  <div className="text-gray-500 text-xs py-3 text-center bg-gray-50 rounded border border-dashed border-gray-200">
+                    Nenhum beneficiário encontrado no Jurídico ou Gestão Assistencial para a busca realizada.
                   </div>
                 )}
               </div>
