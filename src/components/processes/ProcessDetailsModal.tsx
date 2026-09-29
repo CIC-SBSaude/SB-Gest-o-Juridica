@@ -41,6 +41,8 @@ import { ProcessFinancialSection } from './ProcessFinancialSection';
 import { ProcessProvidersSection } from './ProcessProvidersSection';
 // E3 — novos componentes
 import { ProcessBeneficiariesSection } from './ProcessBeneficiariesSection';
+// E5 — novos componentes
+import { ProcessAllegationsSection } from './ProcessAllegationsSection';
 
 interface ProcessDetailsModalProps {
   isOpen: boolean;
@@ -69,6 +71,7 @@ const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
   const [activeTab, setActiveTab] = useState<
     | 'visao-geral'
     | 'beneficiarios'
+    | 'alegacoes'
     | 'financeiro'
     | 'prestadores'
     | 'gestao'
@@ -91,6 +94,7 @@ const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
   const tabs = [
     { id: 'visao-geral', label: 'Visão Geral' },
     { id: 'beneficiarios', label: 'Beneficiários & Planos' },
+    { id: 'alegacoes', label: 'Alegações do Beneficiário' },
     { id: 'financeiro', label: 'Valores & Sentenças' },
     { id: 'prestadores', label: 'Prestadores & Serviços' },
     { id: 'gestao', label: 'Gestão Operacional' },
@@ -504,6 +508,11 @@ const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
           {/* E3 — ABA BENEFICIÁRIOS E PLANOS (RF05, RF06, RF07) */}
           {activeTab === 'beneficiarios' && (
             <ProcessBeneficiariesSection processId={currentProcess.id} readOnly={!canEdit} />
+          )}
+
+          {/* E5 — ABA ALEGAÇÕES DO BENEFICIÁRIO (RF10) */}
+          {activeTab === 'alegacoes' && (
+            <ProcessAllegationsSection processId={currentProcess.id} readOnly={!canEdit} />
           )}
 
           {/* E2 — ABA VALORES E SENTENÇAS (RF09, RF13) */}

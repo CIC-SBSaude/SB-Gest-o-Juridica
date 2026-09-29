@@ -941,3 +941,50 @@ export interface ProcessBeneficiarySummary {
   estipulante_pj_nome: string | null;
   estipulante_pj_cnpj: string | null;
 }
+
+// ============================================================================
+// E5 — RF10, RF14: Alegações do Beneficiário e Auditoria de Revisão
+// ============================================================================
+
+export type AllegationReviewStatus = 'PENDENTE' | 'CONFIRMADA' | 'DIVERGENTE' | 'REJEITADA';
+
+export interface BeneficiaryAllegation {
+  id: string;
+  process_id: string;
+  beneficiary_person_id: string | null;
+  narrativa: string; // Deve começar obrigatoriamente com "Supostamente, o(a) beneficiário(a)"
+  tentativas_contato_qtd: number | null;
+  tentativas_contato_texto: string | null;
+  canais_mencionados: string[] | null;
+  setor_mencionado: string | null;
+  tempo_espera_dias: number | null;
+  tempo_espera_texto: string | null;
+  dificuldade_relatada: string | null;
+  desfecho_alegado: string | null;
+  fonte_documento: string | null;
+  trecho_citado: string | null;
+  status_revisao: AllegationReviewStatus;
+  revisao_justificativa: string | null;
+  revisado_por: string | null;
+  revisado_em: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  criado_por: string | null;
+}
+
+export type ReviewAction = 'CRIAR' | 'ACEITAR' | 'CORRIGIR' | 'REJEITAR' | 'SUPERAR';
+
+export interface HumanReviewLog {
+  id: string;
+  process_id: string;
+  entidade_tipo: string;
+  entidade_id: string;
+  acao: ReviewAction;
+  valor_anterior: Record<string, unknown> | null;
+  valor_novo: Record<string, unknown> | null;
+  justificativa: string | null;
+  fonte_documento: string | null;
+  trecho_citado: string | null;
+  revisado_por: string;
+  criado_em: string;
+}
