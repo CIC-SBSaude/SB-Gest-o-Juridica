@@ -177,6 +177,19 @@ export interface AiLegalInterpretation {
   timelineSummary: string;
   actionSummary: string;
   warnings: string[];
+  allegation?: AiAllegationFinding;
+}
+
+export interface AiAllegationFinding {
+  narrativa: string | null;
+  tentativasContatoQtd: number | null;
+  canaisMencionados: string[];
+  setorMencionado: string | null;
+  tempoEsperaDias: number | null;
+  tempoEsperaTexto: string | null;
+  dificuldadeRelatada: string | null;
+  desfechoAlegado: string | null;
+  confidence: number;
 }
 
 export interface GeminiInterpretationOutcome {
@@ -510,6 +523,33 @@ export function normalizeResult(
   const timelineSummary = String(raw?.timelineSummary || '').trim().slice(0, 1600);
   const actionSummary = String(raw?.actionSummary || '').trim().slice(0, 1000);
 
+  // 8. Alegações do Beneficiário (RF10)
+  const rawAllegation = raw?.allegation || raw?.alegacao || raw?.dificuldadesBeneficiario;
+  let allegationFinding: AiAllegationFinding | undefined = undefined;
+  if (rawAllegation && typeof rawAllegation === 'object') {
+    let rawNarrativa = textOrNull(rawAllegation.narrativa ?? rawAllegation.resumoDificuldades, 1000);
+    if (rawNarrativa) {
+      if (!rawNarrativa.startsWith('Supostamente, o(a) beneficiário(a)')) {
+        rawNarrativa = `Supostamente, o(a) beneficiário(a) ${rawNarrativa.replace(/^o\(a\)\s+beneficiário\(a\)\s+/i, '')}`.trim();
+      }
+    }
+    const canais = Array.isArray(rawAllegation.canaisMencionados)
+      ? rawAllegation.canaisMencionados.map((c: any) => String(c || '').trim()).filter(Boolean)
+      : [];
+
+    allegationFinding = {
+      narrativa: rawNarrativa,
+      tentativasContatoQtd: numberOrNull(rawAllegation.tentativasContatoQtd),
+      canaisMencionados: canais,
+      setorMencionado: textOrNull(rawAllegation.setorMencionado, 150),
+      tempoEsperaDias: numberOrNull(rawAllegation.tempoEsperaDias),
+      tempoEsperaTexto: textOrNull(rawAllegation.tempoEsperaTexto, 150),
+      dificuldadeRelatada: textOrNull(rawAllegation.dificuldadeRelatada, 300),
+      desfechoAlegado: textOrNull(rawAllegation.desfechoAlegado, 300),
+      confidence: clampConfidence(rawAllegation.confidence ?? 0.85),
+    };
+  }
+
   return {
     isLegal,
     eventType,
@@ -545,6 +585,7 @@ export function normalizeResult(
     timelineSummary,
     actionSummary,
     warnings,
+    allegation: allegationFinding,
   };
 }
 
@@ -596,7 +637,8 @@ export async function interpretWithGemini(params: {
     `3. VALORES FINANCEIROS: Diferencie estritamente valorCausa, valorCondenacao, valorMultaDiaria e valorMultaLimite. Se o texto disser "multa diária de R$ 1.000, limitada a R$ 20.000", valorMultaDiaria=1000 e valorMultaLimite=20000. O teto jamais pode ser tratado como multa diária. valorMulta é apenas compatibilidade genérica. Nunca converta multa em valor da causa.\n` +
     `4. PRAZO vs DATA: Confiança na existência do prazo (exists) é SEPARADA da confiança da data limite final calculada (dueDate). Se houver prazo em dias mas sem data final determinável, dueDate deve ser null.\n` +
     `5. OBRIGAÇÃO: Confiança na obrigação de fazer/não fazer (exists) é SEPARADA da existência de prazos normais. Só marque exists: true se houver determinação/obrigação de cumprimento explícita.\n` +
-    `6. CNJ: Só informe numeroProcesso se estiver presente nas evidências e válido no padrão CNJ (20 dígitos).\n\n` +
+    `6. CNJ: Só informe numeroProcesso se estiver presente nas evidências e válido no padrão CNJ (20 dígitos).\n` +
+    `7. DIFICULDADES DO BENEFICIÁRIO (RF10): Se houver relato de dificuldades enfrentadas pelo beneficiário (tentativas de contato telefônico, setores envolvidos, tempo de espera), extraia no objeto "allegation". OBRIGATÓRIO: A narrativa DEVE começar com o prefixo exato "Supostamente, o(a) beneficiário(a)" (ex: "Supostamente, o(a) beneficiário(a) realizou 3 ligações para o SAC aguardando 15 dias sem retorno...").\n\n` +
     `Retorne SOMENTE JSON válido estruturado exatamente no seguinte formato:\n` +
     JSON.stringify({
       isLegal: true,
@@ -654,6 +696,17 @@ export async function interpretWithGemini(params: {
         type: { value: null, confidence: 0.0, evidence: null },
         criticality: { value: 'ALTA', confidence: 0.0, evidence: null },
         dailyPenalty: { value: null, confidence: 0.0, evidence: null }
+      },
+      allegation: {
+        narrativa: 'Supostamente, o(a) beneficiário(a) tentou contato...',
+        tentativasContatoQtd: null,
+        canaisMencionados: [],
+        setorMencionado: null,
+        tempoEsperaDias: null,
+        tempoEsperaTexto: null,
+        dificuldadeRelatada: null,
+        desfechoAlegado: null,
+        confidence: 0.0
       },
       timelineTitle: 'Título sucinto do evento',
       timelineSummary: 'Resumo factual e objetivo dos fatos e determinações',

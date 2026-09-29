@@ -1,5 +1,15 @@
 import { supabase } from './supabase';
-import { Process, ProcessStatus, Company, Obligation, ProcessParty, ProcessSegment } from '../types/database';
+import {
+  Process,
+  ProcessStatus,
+  Company,
+  Obligation,
+  ProcessParty,
+  ProcessSegment,
+  ProcessDefendant,
+  ProcessOrigin,
+  ProcessAssistentialItem,
+} from '../types/database';
 import { sortProcesses, type ProcessSortOption } from '../utils/processSorting';
 import { formatUserErrorMessage } from '../utils/errorUtils';
 
@@ -11,6 +21,14 @@ export interface ProcessFilters {
   includeArchived?: boolean;
   sort?: ProcessSortOption;
   segmento?: ProcessSegment | 'ALL';
+  // Filtros de negócio (RF02, RF03, RF04, RF05/06, RF08)
+  reu?: 'ALL' | 'SB_SAUDE' | 'SAN_MIGUEL' | string;
+  competenciaAno?: number | 'ALL';
+  competenciaMes?: number | 'ALL';
+  uf?: string | 'ALL';
+  municipio?: string;
+  classeAssistencial?: string | 'ALL';
+  subclassificacao?: string;
 }
 
 export interface CreateProcessDTO {
@@ -159,18 +177,128 @@ class ProcessesService {
         result = this.filterLocally(result, filters.search);
       }
 
-      // Enriquecimento operacional em lote (sem N+1): obrigação ativa + autores classificados.
+      // Enriquecimento operacional em lote (sem N+1): obrigação ativa, autores, rés, origem, itens assistenciais e beneficiários
       if (result.length > 0) {
         const processIds = result.map((p) => p.id);
-        const [obligationsMap, authorsMap] = await Promise.all([
+        const [
+          obligationsMap,
+          authorsMap,
+          defendantsMap,
+          originsMap,
+          assistentialMap,
+          beneficiariesMap,
+        ] = await Promise.all([
           this.fetchPrimaryObligationsForProcesses(processIds),
           this.fetchAuthorsForProcesses(processIds),
+          this.fetchDefendantsForProcesses(processIds),
+          this.fetchOriginsForProcesses(processIds),
+          this.fetchAssistentialItemsForProcesses(processIds),
+          this.fetchBeneficiariesForProcesses(processIds),
         ]);
+
         result = result.map((proc) => ({
           ...proc,
           proxima_obrigacao: obligationsMap[proc.id] || null,
           autores: authorsMap[proc.id] || [],
+          defendants: defendantsMap[proc.id] || [],
+          origin: originsMap[proc.id] || null,
+          assistential_items: assistentialMap[proc.id] || [],
+          beneficiaries: beneficiariesMap[proc.id] || [],
         }));
+
+        // RF02 — Filtro por Réu (SB SAÚDE vs SAN MIGUEL vs Outros)
+        if (filters?.reu && filters.reu !== 'ALL') {
+          const target = filters.reu.toUpperCase();
+          result = result.filter((proc) => {
+            const hasMatch = proc.defendants?.some((d) => {
+              const compNome = (d.company?.nome || '').toUpperCase();
+              const livre = (d.nome_livre || '').toUpperCase();
+              if (target === 'SB_SAUDE') {
+                return (
+                  compNome.includes('SB') ||
+                  compNome.includes('SAUDE BRASIL') ||
+                  livre.includes('SB') ||
+                  livre.includes('SAUDE BRASIL')
+                );
+              }
+              if (target === 'SAN_MIGUEL') {
+                return compNome.includes('SAN MIGUEL') || livre.includes('SAN MIGUEL');
+              }
+              return compNome.includes(target) || livre.includes(target);
+            });
+            if (hasMatch) return true;
+
+            const legacyComp = (proc.company?.nome || '').toUpperCase();
+            if (target === 'SB_SAUDE') {
+              return legacyComp.includes('SB') || legacyComp.includes('SAUDE BRASIL');
+            }
+            if (target === 'SAN_MIGUEL') {
+              return legacyComp.includes('SAN MIGUEL');
+            }
+            return false;
+          });
+        }
+
+        // RF03/RF04 — Filtro por Competência (Ano / Mês do 1º e-mail ou origem)
+        if (filters?.competenciaAno && filters.competenciaAno !== 'ALL') {
+          const anoNum = Number(filters.competenciaAno);
+          result = result.filter((proc) => {
+            if (anoNum === -1) {
+              return !proc.origin || !proc.origin.competencia_ano;
+            }
+            return proc.origin?.competencia_ano === anoNum;
+          });
+        }
+
+        if (filters?.competenciaMes && filters.competenciaMes !== 'ALL') {
+          const mesNum = Number(filters.competenciaMes);
+          result = result.filter((proc) => {
+            return proc.origin?.competencia_mes === mesNum;
+          });
+        }
+
+        // RF05/RF06 — Filtro por Região / Domicílio do Beneficiário (UF e Município)
+        if (filters?.uf && filters.uf !== 'ALL') {
+          const targetUf = filters.uf.toUpperCase();
+          result = result.filter((proc) => {
+            if ((proc.uf || '').toUpperCase() === targetUf) return true;
+            return (proc as any).beneficiaries?.some(
+              (b: any) => (b.snapshot_uf || '').toUpperCase() === targetUf
+            );
+          });
+        }
+
+        if (filters?.municipio && filters.municipio.trim() !== '') {
+          const targetMun = filters.municipio.trim().toLowerCase();
+          result = result.filter((proc) => {
+            if ((proc.municipio || '').toLowerCase().includes(targetMun)) return true;
+            return (proc as any).beneficiaries?.some((b: any) =>
+              (b.snapshot_municipio || '').toLowerCase().includes(targetMun)
+            );
+          });
+        }
+
+        // RF08 — Filtro por Classificação Assistencial (Dados brutos)
+        if (filters?.classeAssistencial && filters.classeAssistencial !== 'ALL') {
+          const targetClasse = filters.classeAssistencial.toUpperCase();
+          result = result.filter((proc) => {
+            return proc.assistential_items?.some((item) => {
+              const cl = (item.catalog?.classe || (item as any).classe || '').toUpperCase();
+              return cl === targetClasse;
+            });
+          });
+        }
+
+        // RF08 — Filtro por Subclassificação / Detalhe refinado
+        if (filters?.subclassificacao && filters.subclassificacao.trim() !== '') {
+          const targetSub = filters.subclassificacao.trim().toLowerCase();
+          result = result.filter((proc) => {
+            return proc.assistential_items?.some((item) => {
+              const det = (item.catalog?.detalhe || item.descricao_livre || '').toLowerCase();
+              return det.includes(targetSub);
+            });
+          });
+        }
       }
 
       // A ordenação é aplicada após o enriquecimento porque "Prazo mais próximo"
@@ -240,6 +368,224 @@ class ProcessesService {
       return grouped;
     } catch (err) {
       console.warn('[processesService] Exceção ao buscar autores em lote:', err);
+      return {};
+    }
+  }
+
+  /**
+   * RF02 — Carrega as rés vinculadas aos processos em lote.
+   */
+  async fetchDefendantsForProcesses(processIds: string[]): Promise<Record<string, ProcessDefendant[]>> {
+    if (!processIds || processIds.length === 0) return {};
+    const uniqueIds = Array.from(new Set(processIds.filter((id) => Boolean(id && typeof id === 'string'))));
+    if (uniqueIds.length === 0) return {};
+
+    try {
+      const CHUNK_SIZE = 80;
+      const chunks: string[][] = [];
+      for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+        chunks.push(uniqueIds.slice(i, i + CHUNK_SIZE));
+      }
+
+      const allDefs: ProcessDefendant[] = [];
+      await Promise.all(
+        chunks.map(async (chunk) => {
+          const { data, error } = await supabase
+            .from('process_defendants')
+            .select(`
+              id,
+              process_id,
+              company_id,
+              nome_livre,
+              documento_livre,
+              papel,
+              evidencia_texto,
+              evidencia_fonte,
+              confirmado,
+              created_by,
+              created_at,
+              updated_by,
+              updated_at,
+              correcao_anterior,
+              correcao_motivo,
+              correcao_em,
+              correcao_por,
+              company:companies(id, nome, cnpj)
+            `)
+            .in('process_id', chunk);
+
+          if (!error && data && Array.isArray(data)) {
+            const normalized = data.map((d: any) => ({
+              ...d,
+              company: Array.isArray(d.company) ? d.company[0] || null : d.company || null,
+            }));
+            allDefs.push(...(normalized as unknown as ProcessDefendant[]));
+          }
+        })
+      );
+
+      const grouped: Record<string, ProcessDefendant[]> = {};
+      for (const def of allDefs) {
+        if (!grouped[def.process_id]) grouped[def.process_id] = [];
+        grouped[def.process_id].push(def);
+      }
+      return grouped;
+    } catch (err) {
+      console.warn('[processesService] Exceção ao buscar rés em lote:', err);
+      return {};
+    }
+  }
+
+  /**
+   * RF03 — Carrega a competência/origem atual de cada processo em lote.
+   */
+  async fetchOriginsForProcesses(processIds: string[]): Promise<Record<string, ProcessOrigin>> {
+    if (!processIds || processIds.length === 0) return {};
+    const uniqueIds = Array.from(new Set(processIds.filter((id) => Boolean(id && typeof id === 'string'))));
+    if (uniqueIds.length === 0) return {};
+
+    try {
+      const CHUNK_SIZE = 80;
+      const chunks: string[][] = [];
+      for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+        chunks.push(uniqueIds.slice(i, i + CHUNK_SIZE));
+      }
+
+      const allOrigins: ProcessOrigin[] = [];
+      await Promise.all(
+        chunks.map(async (chunk) => {
+          const { data, error } = await supabase
+            .from('process_origin')
+            .select('*')
+            .in('process_id', chunk)
+            .eq('is_current', true);
+
+          if (!error && data && Array.isArray(data)) {
+            allOrigins.push(...(data as ProcessOrigin[]));
+          }
+        })
+      );
+
+      const grouped: Record<string, ProcessOrigin> = {};
+      for (const orig of allOrigins) {
+        grouped[orig.process_id] = orig;
+      }
+      return grouped;
+    } catch (err) {
+      console.warn('[processesService] Exceção ao buscar origens em lote:', err);
+      return {};
+    }
+  }
+
+  /**
+   * RF08 — Carrega itens assistenciais (classe e subclassificação) em lote.
+   */
+  async fetchAssistentialItemsForProcesses(processIds: string[]): Promise<Record<string, ProcessAssistentialItem[]>> {
+    if (!processIds || processIds.length === 0) return {};
+    const uniqueIds = Array.from(new Set(processIds.filter((id) => Boolean(id && typeof id === 'string'))));
+    if (uniqueIds.length === 0) return {};
+
+    try {
+      const CHUNK_SIZE = 80;
+      const chunks: string[][] = [];
+      for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+        chunks.push(uniqueIds.slice(i, i + CHUNK_SIZE));
+      }
+
+      const allItems: ProcessAssistentialItem[] = [];
+      await Promise.all(
+        chunks.map(async (chunk) => {
+          const { data, error } = await supabase
+            .from('process_assistential_items')
+            .select(`
+              id,
+              process_id,
+              catalog_id,
+              descricao_livre,
+              predominante,
+              fonte,
+              evidencia_id,
+              revisao,
+              revisado_por,
+              revisado_em,
+              created_by,
+              created_at,
+              updated_at,
+              catalog:assistential_catalog(id, classe, detalhe, detalhe_normalizado, sinonimos, ativo, codigo_estavel, created_at, updated_at)
+            `)
+            .in('process_id', chunk);
+
+          if (!error && data && Array.isArray(data)) {
+            const normalized = data.map((d: any) => ({
+              ...d,
+              catalog: Array.isArray(d.catalog) ? d.catalog[0] || null : d.catalog || null,
+            }));
+            allItems.push(...(normalized as unknown as ProcessAssistentialItem[]));
+          }
+        })
+      );
+
+      const grouped: Record<string, ProcessAssistentialItem[]> = {};
+      for (const it of allItems) {
+        if (!grouped[it.process_id]) grouped[it.process_id] = [];
+        grouped[it.process_id].push(it);
+      }
+      return grouped;
+    } catch (err) {
+      console.warn('[processesService] Exceção ao buscar itens assistenciais em lote:', err);
+      return {};
+    }
+  }
+
+  /**
+   * RF05/RF06 — Carrega vínculos de beneficiários e fotografia territorial em lote.
+   */
+  async fetchBeneficiariesForProcesses(processIds: string[]): Promise<Record<string, any[]>> {
+    if (!processIds || processIds.length === 0) return {};
+    const uniqueIds = Array.from(new Set(processIds.filter((id) => Boolean(id && typeof id === 'string'))));
+    if (uniqueIds.length === 0) return {};
+
+    try {
+      const CHUNK_SIZE = 80;
+      const chunks: string[][] = [];
+      for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+        chunks.push(uniqueIds.slice(i, i + CHUNK_SIZE));
+      }
+
+      const allBens: any[] = [];
+      await Promise.all(
+        chunks.map(async (chunk) => {
+          const { data, error } = await supabase
+            .from('process_beneficiaries')
+            .select(`
+              id,
+              process_id,
+              person_id,
+              enrollment_id,
+              papel,
+              is_principal,
+              snapshot_municipio,
+              snapshot_uf,
+              snapshot_regional,
+              confirmado,
+              person:beneficiary_persons(id, nome_completo, cpf_limpo)
+            `)
+            .in('process_id', chunk);
+
+          if (!error && data && Array.isArray(data)) {
+            allBens.push(...data);
+          }
+        })
+      );
+
+      const grouped: Record<string, any[]> = {};
+      for (const b of allBens) {
+        if (!grouped[b.process_id]) grouped[b.process_id] = [];
+        grouped[b.process_id].push(b);
+      }
+      return grouped;
+    } catch (err) {
+      console.warn('[processesService] Exceção ao buscar beneficiários em lote:', err);
       return {};
     }
   }

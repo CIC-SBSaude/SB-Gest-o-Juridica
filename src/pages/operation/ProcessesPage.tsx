@@ -56,6 +56,16 @@ export const ProcessesPage: React.FC = () => {
   const [includeArchived, setIncludeArchived] = useState<boolean>(false);
   const [sortOption, setSortOption] = useState<ProcessSortOption>('OPERATIONAL_PRIORITY');
 
+  // Novos filtros de negócio (Réu, Competência 1º e-mail, Região, Classificação Assistencial)
+  const [reuFilter, setReuFilter] = useState<'ALL' | 'SB_SAUDE' | 'SAN_MIGUEL' | 'OUTRO'>('ALL');
+  const [competenciaAnoFilter, setCompetenciaAnoFilter] = useState<number | 'ALL'>('ALL');
+  const [competenciaMesFilter, setCompetenciaMesFilter] = useState<number | 'ALL'>('ALL');
+  const [ufFilter, setUfFilter] = useState<string | 'ALL'>('ALL');
+  const [municipioFilter, setMunicipioFilter] = useState<string>('');
+  const [classeFilter, setClasseFilter] = useState<string | 'ALL'>('ALL');
+  const [subclasseFilter, setSubclasseFilter] = useState<string>('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
+
   // Estados dos modais
   const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
   const [processModalMode, setProcessModalMode] = useState<'create' | 'edit'>('create');
@@ -100,6 +110,13 @@ export const ProcessesPage: React.FC = () => {
       segmento: segmentoFilter,
       includeArchived,
       sort: sortOption,
+      reu: reuFilter,
+      competenciaAno: competenciaAnoFilter,
+      competenciaMes: competenciaMesFilter,
+      uf: ufFilter,
+      municipio: municipioFilter,
+      classeAssistencial: classeFilter,
+      subclassificacao: subclasseFilter,
     };
 
     const res = await processesService.getProcesses(filters);
@@ -112,7 +129,22 @@ export const ProcessesPage: React.FC = () => {
     }
 
     setIsLoading(false);
-  }, [searchQuery, statusFilter, companyFilter, priorityFilter, segmentoFilter, includeArchived, sortOption]);
+  }, [
+    searchQuery,
+    statusFilter,
+    companyFilter,
+    priorityFilter,
+    segmentoFilter,
+    includeArchived,
+    sortOption,
+    reuFilter,
+    competenciaAnoFilter,
+    competenciaMesFilter,
+    ufFilter,
+    municipioFilter,
+    classeFilter,
+    subclasseFilter,
+  ]);
 
   useEffect(() => {
     fetchProcesses();
@@ -479,6 +511,122 @@ export const ProcessesPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Linha de filtros de negócio: Réu, Competência, Região e Classificação Assistencial */}
+        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-3 text-xs text-slate-700">
+          {/* RF02 — Separar Réu: SB Saúde vs San Miguel */}
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-500">Réu:</span>
+            <select
+              id="processes-reu-filter"
+              value={reuFilter}
+              onChange={(e) => setReuFilter(e.target.value as any)}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+            >
+              <option value="ALL">Todos os Réus</option>
+              <option value="SB_SAUDE">SB Saúde</option>
+              <option value="SAN_MIGUEL">San Miguel</option>
+              <option value="OUTRO">Outros</option>
+            </select>
+          </div>
+
+          {/* RF03/RF04 — Competência de Origem (Mês / Ano do 1º e-mail) */}
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-semibold text-slate-500">Competência:</span>
+            <select
+              id="processes-ano-filter"
+              value={competenciaAnoFilter}
+              onChange={(e) => setCompetenciaAnoFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+            >
+              <option value="ALL">Ano: Todos</option>
+              <option value={2026}>2026</option>
+              <option value={2025}>2025</option>
+              <option value={2024}>2024</option>
+              <option value={2023}>2023</option>
+              <option value={-1}>Sem competência</option>
+            </select>
+            <select
+              id="processes-mes-filter"
+              value={competenciaMesFilter}
+              onChange={(e) => setCompetenciaMesFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+            >
+              <option value="ALL">Mês: Todos</option>
+              <option value={1}>01 - Jan</option>
+              <option value={2}>02 - Fev</option>
+              <option value={3}>03 - Mar</option>
+              <option value={4}>04 - Abr</option>
+              <option value={5}>05 - Mai</option>
+              <option value={6}>06 - Jun</option>
+              <option value={7}>07 - Jul</option>
+              <option value={8}>08 - Ago</option>
+              <option value={9}>09 - Set</option>
+              <option value={10}>10 - Out</option>
+              <option value={11}>11 - Nov</option>
+              <option value={12}>12 - Dez</option>
+            </select>
+          </div>
+
+          {/* RF05/RF06 — Região / Domicílio do Beneficiário */}
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-500">Região:</span>
+            <select
+              id="processes-uf-filter"
+              value={ufFilter}
+              onChange={(e) => setUfFilter(e.target.value)}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+            >
+              <option value="ALL">UF: Todas</option>
+              <option value="SP">SP</option>
+              <option value="RJ">RJ</option>
+              <option value="MG">MG</option>
+              <option value="BA">BA</option>
+              <option value="DF">DF</option>
+              <option value="PR">PR</option>
+              <option value="RS">RS</option>
+              <option value="GO">GO</option>
+              <option value="PE">PE</option>
+              <option value="ES">ES</option>
+              <option value="SC">SC</option>
+              <option value="CE">CE</option>
+            </select>
+            <input
+              type="text"
+              value={municipioFilter}
+              onChange={(e) => setMunicipioFilter(e.target.value)}
+              placeholder="Município..."
+              className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+            />
+          </div>
+
+          {/* RF08 — Classificação Assistencial (Bruto e Refinado) */}
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-500">Procedimento:</span>
+            <select
+              id="processes-classe-filter"
+              value={classeFilter}
+              onChange={(e) => setClasseFilter(e.target.value)}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+            >
+              <option value="ALL">Classe: Todas</option>
+              <option value="CONSULTA">Consulta</option>
+              <option value="EXAME">Exame</option>
+              <option value="CIRURGIA">Cirurgia</option>
+              <option value="INTERNACAO">Internação</option>
+              <option value="TERAPIA">Terapia</option>
+              <option value="OUTRO">Outro</option>
+            </select>
+            <input
+              type="text"
+              value={subclasseFilter}
+              onChange={(e) => setSubclasseFilter(e.target.value)}
+              placeholder="Subclasse (hérnia, USG)..."
+              className="w-36 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+            />
+          </div>
+        </div>
+
         {/* Linha secundária de filtros: Prioridade e Arquivados */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs text-slate-600">
           <div className="flex flex-wrap items-center gap-4">
@@ -545,7 +693,19 @@ export const ProcessesPage: React.FC = () => {
             </label>
           </div>
 
-          {(searchQuery || statusFilter !== 'ALL' || companyFilter !== 'ALL' || priorityFilter !== 'ALL' || segmentoFilter !== 'ALL' || includeArchived) && (
+          {(searchQuery ||
+            statusFilter !== 'ALL' ||
+            companyFilter !== 'ALL' ||
+            priorityFilter !== 'ALL' ||
+            segmentoFilter !== 'ALL' ||
+            includeArchived ||
+            reuFilter !== 'ALL' ||
+            competenciaAnoFilter !== 'ALL' ||
+            competenciaMesFilter !== 'ALL' ||
+            ufFilter !== 'ALL' ||
+            municipioFilter.trim() !== '' ||
+            classeFilter !== 'ALL' ||
+            subclasseFilter.trim() !== '') && (
             <button
               type="button"
               onClick={() => {
@@ -555,6 +715,13 @@ export const ProcessesPage: React.FC = () => {
                 setPriorityFilter('ALL');
                 setSegmentoFilter('ALL');
                 setIncludeArchived(false);
+                setReuFilter('ALL');
+                setCompetenciaAnoFilter('ALL');
+                setCompetenciaMesFilter('ALL');
+                setUfFilter('ALL');
+                setMunicipioFilter('');
+                setClasseFilter('ALL');
+                setSubclasseFilter('');
               }}
               className="text-xs text-red-600 hover:text-red-800 font-semibold cursor-pointer underline"
             >
@@ -566,6 +733,32 @@ export const ProcessesPage: React.FC = () => {
 
       {/* Tabela Corporativa de Processos */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        {/* Barra de Totalizador Dinâmico */}
+        <div className="flex flex-wrap items-center justify-between px-4 py-2.5 bg-slate-50/80 border-b border-slate-200 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-700">Total de Processos:</span>
+            <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 font-extrabold text-xs">
+              {processes.length}
+            </span>
+            {(searchQuery ||
+              statusFilter !== 'ALL' ||
+              companyFilter !== 'ALL' ||
+              priorityFilter !== 'ALL' ||
+              segmentoFilter !== 'ALL' ||
+              includeArchived ||
+              reuFilter !== 'ALL' ||
+              competenciaAnoFilter !== 'ALL' ||
+              competenciaMesFilter !== 'ALL' ||
+              ufFilter !== 'ALL' ||
+              municipioFilter.trim() !== '' ||
+              classeFilter !== 'ALL' ||
+              subclasseFilter.trim() !== '') && (
+              <span className="text-[11px] text-slate-500 italic">
+                (filtrados pelos critérios selecionados)
+              </span>
+            )}
+          </div>
+        </div>
         {isLoading ? (
           <div className="py-16 text-center space-y-3">
             <Loader2 className="w-7 h-7 animate-spin text-red-600 mx-auto" />
