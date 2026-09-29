@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Process, ProcessStatus, Company, Obligation, ProcessParty } from '../types/database';
+import { Process, ProcessStatus, Company, Obligation, ProcessParty, ProcessSegment } from '../types/database';
 import { sortProcesses, type ProcessSortOption } from '../utils/processSorting';
 import { formatUserErrorMessage } from '../utils/errorUtils';
 
@@ -10,6 +10,7 @@ export interface ProcessFilters {
   prioridade?: string | 'ALL';
   includeArchived?: boolean;
   sort?: ProcessSortOption;
+  segmento?: ProcessSegment | 'ALL';
 }
 
 export interface CreateProcessDTO {
@@ -96,6 +97,15 @@ class ProcessesService {
         query = query.eq('prioridade', filters.prioridade);
       }
 
+      // Filtro por segmento (RF01/RF04)
+      if (filters?.segmento && filters.segmento !== 'ALL') {
+        if (filters.segmento === 'NAO_CLASSIFICADO') {
+          query = query.or('segmento.is.null,segmento.eq.NAO_CLASSIFICADO');
+        } else {
+          query = query.eq('segmento', filters.segmento);
+        }
+      }
+
       // Filtro por arquivado (por padrão lista apenas processos ativos)
       if (!filters?.includeArchived) {
         query = query.eq('arquivado', false);
@@ -123,6 +133,13 @@ class ProcessesService {
         }
         if (filters?.prioridade && filters.prioridade !== 'ALL') {
           fallbackQuery = fallbackQuery.eq('prioridade', filters.prioridade);
+        }
+        if (filters?.segmento && filters.segmento !== 'ALL') {
+          if (filters.segmento === 'NAO_CLASSIFICADO') {
+            fallbackQuery = fallbackQuery.or('segmento.is.null,segmento.eq.NAO_CLASSIFICADO');
+          } else {
+            fallbackQuery = fallbackQuery.eq('segmento', filters.segmento);
+          }
         }
         if (!filters?.includeArchived) {
           fallbackQuery = fallbackQuery.eq('arquivado', false);

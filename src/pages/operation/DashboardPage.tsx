@@ -24,6 +24,7 @@ import {
   RawProcessClassification,
   CompanyOption,
 } from '../../components/dashboard/DemandClassificationKpiPanel';
+import { OperationalSegmentKpiPanel } from '../../components/dashboard/OperationalSegmentKpiPanel';
 
 type ExecutiveKpis = {
   processos_ativos: number;
@@ -399,6 +400,9 @@ export const DashboardPage: React.FC = () => {
           </div>
         </section>
       </div>
+
+      {/* Indicadores de Segmentação, Valores e Qualidade (RF17) */}
+      <OperationalSegmentKpiPanel />
 
       {/* Perfil material da carteira: importante, porém compacto e sem redundâncias. */}
       <DemandClassificationKpiPanel

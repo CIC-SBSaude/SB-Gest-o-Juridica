@@ -15,7 +15,7 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import { Process, ProcessStatus, Company } from '../../types/database';
+import { Process, ProcessStatus, Company, ProcessSegment } from '../../types/database';
 import { processesService, type ProcessFilters } from '../../services/processesService';
 import type { ProcessSortOption } from '../../utils/processSorting';
 import { companiesService } from '../../services/companiesService';
@@ -52,6 +52,7 @@ export const ProcessesPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<ProcessStatus | 'ALL'>('ALL');
   const [companyFilter, setCompanyFilter] = useState<string | 'ALL'>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string | 'ALL'>('ALL');
+  const [segmentoFilter, setSegmentoFilter] = useState<ProcessSegment | 'ALL'>('ALL');
   const [includeArchived, setIncludeArchived] = useState<boolean>(false);
   const [sortOption, setSortOption] = useState<ProcessSortOption>('OPERATIONAL_PRIORITY');
 
@@ -96,6 +97,7 @@ export const ProcessesPage: React.FC = () => {
       status: statusFilter,
       companyId: companyFilter,
       prioridade: priorityFilter,
+      segmento: segmentoFilter,
       includeArchived,
       sort: sortOption,
     };
@@ -110,7 +112,7 @@ export const ProcessesPage: React.FC = () => {
     }
 
     setIsLoading(false);
-  }, [searchQuery, statusFilter, companyFilter, priorityFilter, includeArchived, sortOption]);
+  }, [searchQuery, statusFilter, companyFilter, priorityFilter, segmentoFilter, includeArchived, sortOption]);
 
   useEffect(() => {
     fetchProcesses();
@@ -482,6 +484,22 @@ export const ProcessesPage: React.FC = () => {
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-1.5">
               <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <span className="font-semibold text-slate-500">Segmento:</span>
+              <select
+                id="processes-segmento-filter"
+                value={segmentoFilter}
+                onChange={(e) => setSegmentoFilter(e.target.value as ProcessSegment | 'ALL')}
+                className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+              >
+                <option value="ALL">Todos os Segmentos</option>
+                <option value="ASSISTENCIAL">Assistencial</option>
+                <option value="PRESTADOR">Prestador</option>
+                <option value="OUTRO">Outro</option>
+                <option value="NAO_CLASSIFICADO">Não Classificado</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
               <span className="font-semibold text-slate-500">Prioridade:</span>
               <select
                 value={priorityFilter}
@@ -527,7 +545,7 @@ export const ProcessesPage: React.FC = () => {
             </label>
           </div>
 
-          {(searchQuery || statusFilter !== 'ALL' || companyFilter !== 'ALL' || priorityFilter !== 'ALL' || includeArchived) && (
+          {(searchQuery || statusFilter !== 'ALL' || companyFilter !== 'ALL' || priorityFilter !== 'ALL' || segmentoFilter !== 'ALL' || includeArchived) && (
             <button
               type="button"
               onClick={() => {
@@ -535,6 +553,7 @@ export const ProcessesPage: React.FC = () => {
                 setStatusFilter('ALL');
                 setCompanyFilter('ALL');
                 setPriorityFilter('ALL');
+                setSegmentoFilter('ALL');
                 setIncludeArchived(false);
               }}
               className="text-xs text-red-600 hover:text-red-800 font-semibold cursor-pointer underline"
