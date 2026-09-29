@@ -25,8 +25,8 @@ const supabaseUrlEnv = firstEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
 
 export const ENV = Object.freeze({
   app: Object.freeze({
-    // Porta 3000 fixa e mandatória pela infraestrutura de proxy reverso nginx.
-    port: 3000,
+    // Porta 3002 fixa e mandatória pela infraestrutura de proxy reverso nginx.
+    port: 3002,
     pipelineVersion: '2.5-gemini-semantic',
     disableHmr: true,
   }),
@@ -129,7 +129,7 @@ export function validateBackendConfig(): BackendConfigIssue[] {
 export function getSafeConfigReport() {
   return {
     app: {
-      port: { value: ENV.app.port, source: 'HARDCODED_INFRA_3000' },
+      port: { value: ENV.app.port, source: 'HARDCODED_INFRA_3002' },
       pipelineVersion: { value: ENV.app.pipelineVersion, source: 'BACKEND_FIXED' },
       hmrEnabled: { value: !ENV.app.disableHmr, source: 'BACKEND_FIXED' },
     },
